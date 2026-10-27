@@ -1,0 +1,48 @@
+{
+ "model.py": {
+  "source": "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/pmac_gfp_dapi_e200_2026-10-25/model.py",
+  "sha256": "40a3ae3519e29051aa557d2706c22e8de50bc409bca6a6ca6212a9c089483a53"
+ },
+ "resolution_base.py": {
+  "source": "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/pmac_gfp_dapi_e200_2026-10-25/resolution_base.py",
+  "sha256": "0480461fac9b14c850970101595f65addcdfc985cccff20d1069a2036491dded"
+ },
+ "base_model.py": {
+  "source": "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/pmac_gfp_dapi_e200_2026-10-25/base_model.py",
+  "sha256": "bb6619305064f15266d5e7e4341aac887a6d52affe1ddaf47b6c4ba17903f5a9"
+ },
+ "factorial_model.py": {
+  "source": "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/pmac_gfp_dapi_e200_2026-10-25/factorial_model.py",
+  "sha256": "405847585063d20f1bbc49cedef71e0e747c1c29c12a2ba7259282034087e3a5"
+ },
+ "backbones.py": {
+  "source": "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/pmac_gfp_dapi_e200_2026-10-25/backbones.py",
+  "sha256": "40b942263544804d6e7b3498880f482848b1893642906663916298f35ca39091"
+ },
+ "model_unicom.py": {
+  "source": "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/pmac_gfp_dapi_e200_2026-10-25/model_unicom.py",
+  "sha256": "9b06f12903e2d58df0a4d2678ae3ff33eaf14d33ac33061164b6794e203eb24d"
+ },
+ "legacy_joint.py": {
+  "source": "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/pmac_gfp_dapi_e200_2026-10-25/legacy_joint.py",
+  "sha256": "b49f07f9ba9eb5ccaf5dd18120ac2385b6e4f1c24d1f2a340378efd75ed53371"
+ },
+ "unicom_vit.py": {
+  "source": "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/marco_onestage_B_unfrozen_2026-10-08/vendor_unicom/unicom/unicom/vision_transformer.py",
+  "sha256": "9f707ce7734c4df6d0a05895e514671211fe346d03d03758a59cb998ae8684a8"
+ },
+ "LICENSE_UNICOM": {
+  "source": "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/marco_onestage_B_unfrozen_2026-10-08/vendor_unicom/LICENSE",
+  "license": "MIT"
+ },
+ "arms.json": {
+  "source": [
+   "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/pmac_synth2_B_train100_loso_2026-10-22/arms.json",
+   "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/pmac_gfp_dapi_e200_2026-10-25/arms.json"
+  ],
+  "sha256": [
+   "e7eb35996d61b69944840fc49272fe181c7c6b293b30d04dd8d768d5c95519bc",
+   "b516fd7ef72df4320b3d3924eb5dea0b6eba4407267d323f323b27e636545fb8"
+  ]
+ }
+}

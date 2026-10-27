@@ -1,0 +1,12 @@
+# Vercel builds web/ only (project rootDirectory = web)
+/core
+/worker
+/tests
+/tools
+/logs
+**/node_modules
+**/dist
+**/__pycache__
+*.npy
+*.npz
+*.pt

@@ -22,6 +22,12 @@ createServer(async (req, res) => {
   }
   const p = normalize(join(DIST, url.pathname === '/' ? 'index.html' : url.pathname));
   if (!p.startsWith(DIST)) { res.statusCode = 403; return res.end(); }
-  try { await stat(p); res.setHeader('Content-Type', TYPES[extname(p)] || 'application/octet-stream'); res.end(await readFile(p)); }
+  try {
+    const st = await stat(p); res.setHeader('Content-Type', TYPES[extname(p)] || 'application/octet-stream'); res.setHeader('Accept-Ranges', 'bytes');
+    const m = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || '');                       // Viv reads OME-TIFF tiles by range
+    if (!m) return res.end(await readFile(p));
+    const start = Number(m[1]), end = Math.min(m[2] ? Number(m[2]) : st.size - 1, st.size - 1), buf = (await readFile(p)).subarray(start, end + 1);
+    res.statusCode = 206; res.setHeader('Content-Range', `bytes ${start}-${end}/${st.size}`); res.end(buf);
+  }
   catch { res.statusCode = 404; res.end('not found'); }
 }).listen(PORT, '127.0.0.1', () => console.log(`dev server http://127.0.0.1:${PORT}/`));

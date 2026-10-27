@@ -71,12 +71,31 @@ export default function Upload() {
     } catch (e) { setFail(String(e.message || e)); setPhase(null); }
   };
 
+  // the synthetic example pair shipped with the site (public/examples): fetched into File objects, then read like a user's files
+  const [exampleState, setExampleState] = useState(null);
+  const useExample = async () => {
+    setExampleState('loading');
+    try {
+      const meta = await (await fetch('examples/example.json')).json();
+      const file = async (name) => new File([await (await fetch(`examples/${name}`)).blob()], name, { type: 'image/tiff' });
+      const [a, b] = await Promise.all([file(meta.iv.file), file(meta.ex.file)]);
+      setIv(await inspectTiff(a)); setEx(await inspectTiff(b)); setErrs({});
+      setF((s) => ({ ...s, title: s.title || 'Example: synthetic pair' })); setExampleState('done');
+    } catch (e) { setExampleState(`Could not load the example: ${e.message || e}`); }
+  };
+
   const chans = (info) => Array.from({ length: info?.C || 1 }, (_, c) => c);
   return (
     <div className="page">
       <a href="./">← ivex</a>
       <h1>New analysis</h1>
       <p className="lead">Your browser reads both files first and shows what will be analysed. Nothing is uploaded until you press the button.</p>
+      <div className="banner">No data at hand? <button onClick={useExample} disabled={exampleState === 'loading'}>Use the example pair</button>
+        <span className="hint"> · synthetic cells, EX = IV mirrored, rotated 40° and scaled 0.95 (11 MB) · or <a href="examples/example_iv.ome.tif" download>download IV</a> /
+          <a href="examples/example_ex.ome.tif" download> EX</a> · <a href="?data=examples/demo/">see a finished result</a></span>
+        {exampleState && exampleState !== 'loading' && exampleState !== 'done' && <div className="err">{exampleState}</div>}
+        {exampleState === 'done' && <div className="hint">Example loaded: pixel sizes and channels come from the files. Add your invite code and press Upload.</div>}
+      </div>
       <div className="grid2">
         <div className="card">
           <h2 style={{ marginTop: 0 }}>In vivo (IV)</h2>

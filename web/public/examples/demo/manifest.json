@@ -1,0 +1,233 @@
+{
+ "version": "ivex-web-2",
+ "title": "Example result \u00b7 synthetic pair (truth: mirrored, 40\u00b0, scale 0.95)",
+ "private": true,
+ "created": "2026-10-27T18:22:40-0400",
+ "iv": {
+  "image": {
+   "file": "iv.ome.tif",
+   "shape": [
+    8,
+    480,
+    480
+   ],
+   "axes": "ZYX",
+   "levels": 1,
+   "dtype": "uint8",
+   "um_xy": 1.0,
+   "um_z": 3.0,
+   "channels": null
+  },
+  "um_xy": 1.0,
+  "um_z": 3.0,
+  "nz": 8,
+  "mask_sets": [
+   {
+    "name": "cyto2_ft",
+    "label": "fine-tuned cyto2",
+    "color": [
+     0,
+     220,
+     255
+    ],
+    "file": "masks/iv/cyto2_ft.json.gz",
+    "counts": {
+     "0": 87,
+     "1": 112,
+     "2": 130,
+     "3": 143,
+     "4": 151,
+     "5": 154,
+     "6": 134,
+     "7": 103
+    }
+   },
+   {
+    "name": "cyto3_ft",
+    "label": "fine-tuned cyto3 \u00b7 drives matching",
+    "color": [
+     255,
+     80,
+     200
+    ],
+    "file": "masks/iv/cyto3_ft.json.gz",
+    "counts": {
+     "0": 88,
+     "1": 108,
+     "2": 133,
+     "3": 149,
+     "4": 152,
+     "5": 151,
+     "6": 131,
+     "7": 101
+    }
+   },
+   {
+    "name": "cpsam",
+    "label": "CP-SAM (dk5288 fine-tune)",
+    "color": [
+     255,
+     200,
+     0
+    ],
+    "file": "masks/iv/cpsam.json.gz",
+    "counts": {
+     "0": 67,
+     "1": 88,
+     "2": 112,
+     "3": 113,
+     "4": 115,
+     "5": 120,
+     "6": 101,
+     "7": 84
+    }
+   }
+  ],
+  "channel": "channel 0",
+  "default_z": 5
+ },
+ "ex": {
+  "image": {
+   "file": "ex.ome.tif",
+   "shape": [
+    2,
+    1100,
+    1100
+   ],
+   "axes": "CYX",
+   "levels": 3,
+   "dtype": "uint8",
+   "um_xy": 0.6,
+   "um_z": null,
+   "channels": [
+    "GFP",
+    "DAPI"
+   ]
+  },
+  "um_xy": 0.6,
+  "mask_sets": [
+   {
+    "name": "cyto2_ft",
+    "label": "fine-tuned cyto2",
+    "color": [
+     0,
+     220,
+     255
+    ],
+    "file": "masks/ex/cyto2_ft.json.gz",
+    "counts": {
+     "0": 218
+    }
+   },
+   {
+    "name": "cyto3_ft",
+    "label": "fine-tuned cyto3 \u00b7 drives matching",
+    "color": [
+     255,
+     80,
+     200
+    ],
+    "file": "masks/ex/cyto3_ft.json.gz",
+    "counts": {
+     "0": 213
+    }
+   },
+   {
+    "name": "cpsam",
+    "label": "CP-SAM (dk5288 fine-tune)",
+    "color": [
+     255,
+     200,
+     0
+    ],
+    "file": "masks/ex/cpsam.json.gz",
+    "counts": {
+     "0": 203
+    }
+   }
+  ],
+  "channels": [
+   "GFP",
+   "DAPI"
+  ],
+  "projection": "max over planes all"
+ },
+ "pose": "pose.json",
+ "models": [
+  "cyto2_ft",
+  "cyto3_ft",
+  "cpsam"
+ ],
+ "files": [
+  "iv.ome.tif",
+  "ex.ome.tif",
+  "masks/iv/cyto2_ft.json.gz",
+  "masks/iv/cyto3_ft.json.gz",
+  "masks/iv/cpsam.json.gz",
+  "masks/ex/cyto2_ft.json.gz",
+  "masks/ex/cyto3_ft.json.gz",
+  "masks/ex/cpsam.json.gz",
+  "pose.json",
+  "matches_run1.json.gz",
+  "matches_run0.json.gz",
+  "manifest.json"
+ ],
+ "runs": [
+  {
+   "name": "run1",
+   "label": "your orientation \u00b7 flip yes \u00b7 40.0\u00b0",
+   "kind": "manual",
+   "matches": "matches_run1.json.gz",
+   "flip": true,
+   "theta": 39.96352534183348,
+   "iv_to_ex_native": [
+    [
+     -1.2160065155029298,
+     -1.0190321273814789,
+     1085.8345947265627
+    ],
+    [
+     -1.019032165527343,
+     1.2160065307612058,
+     501.907775878906
+    ]
+   ],
+   "match_model": "cpsam"
+  },
+  {
+   "name": "run0",
+   "label": "best pose \u00b7 flip yes \u00b7 40.0\u00b0",
+   "kind": "best",
+   "matches": "matches_run0.json.gz",
+   "flip": true,
+   "theta": 39.9635246536623,
+   "iv_to_ex_native": [
+    [
+     -1.2160065155029298,
+     -1.0190321273814789,
+     1085.8345947265627
+    ],
+    [
+     -1.019032165527343,
+     1.2160065307612058,
+     501.907775878906
+    ]
+   ],
+   "match_model": "cyto3_ft"
+  }
+ ],
+ "match_model": "cpsam",
+ "analysis": {
+  "seconds": 183.2,
+  "gpu": "NVIDIA A100-SXM4-80GB",
+  "pmac": {
+   "arm": "gfpdapi_synth",
+   "crop_scale": [
+    1.0055171224794945,
+    0.9642622117605943
+   ],
+   "checkpoint": "/scratch/sd5963/cell_registration_2026/microscopy_ssl/experiments/jy369_pmac_gfpdapi_2026-10-25/ckpt/gfpdapi_synth_best_val_loss.pt"
+  }
+ },
+ "example": true
+}

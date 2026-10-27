@@ -284,6 +284,7 @@ export default function Viewer({ b, session = null }) {
       <aside className="panel left">
         <h1>ivex · IV ↔ EX</h1>
         <div className="sub">{M.title}</div>
+        {M.example && <div className="hint warn">Example on synthetic data. Your verdicts stay in this browser. <a href="./">Home</a></div>}
         <PoseCard pose={pose} runs={M.runs} runIdx={runIdx} setRunIdx={setRunIdx} poseOk={poseOk} setPoseOk={setPoseOk} manual={manual}
           setManual={(f) => { setManual(f); setMode('overlay'); }} canRematch={!!session && session.canRematch} busy={busy}
           onMatchManual={() => doRematch({ affine: toRows(manualT || manualAffine(manual, M.iv.um_xy, M.ex.um_xy)) }, 'Matching at your orientation')}

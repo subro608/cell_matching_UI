@@ -18,10 +18,10 @@ with sync_playwright() as p:
     files = pg.locator('input[type=file]'); files.nth(0).set_input_files(a.iv); files.nth(1).set_input_files(a.ex)
     pg.wait_for_selector('.preview canvas', timeout=30000); time.sleep(2)
     nums = lambda card: pg.locator('.card').nth(card).locator('input[type=number]')
-    nums(0).nth(0).fill(a.iv_um); nums(0).nth(1).fill(a.iv_z); nums(1).nth(0).fill(a.ex_um)
-    pg.locator('.card').nth(1).locator('select').nth(1).select_option(a.dapi)
-    pg.locator('.card').nth(2).locator('input[type=text]').nth(0).fill('synthetic e2e test'); pg.locator('.card').nth(2).locator('input[type=text]').nth(1).fill(a.invite)
-    dims = [t for t in pg.locator('.field .hint').all_inner_texts() if 'plane' in t]
+    nums(1).nth(0).fill(a.iv_um); nums(1).nth(1).fill(a.iv_z); nums(2).nth(0).fill(a.ex_um)   # cards: example, IV, EX, models
+    pg.locator('.card').nth(2).locator('select').nth(1).select_option(a.dapi)
+    pg.locator('.card').nth(3).locator('input[type=text]').nth(0).fill('e2e upload test'); pg.locator('.card').nth(3).locator('input[type=text]').nth(1).fill(a.invite)
+    dims = [t for t in pg.locator('.drop .hint').all_inner_texts() if 'plane' in t]
     pg.screenshot(path=str(OUT / 'upload_1_form.png'), full_page=True)
     pg.get_by_text('Upload and analyze').click()
     pg.wait_for_url(re.compile(r'\?s='), timeout=300000); time.sleep(3); sid = re.search(r'\?s=([\w-]+)', pg.url).group(1)

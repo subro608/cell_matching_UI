@@ -1,7 +1,10 @@
+import Shell from '../components/Shell';
+
 export default function About() {
   return (
-    <div className="page">
-      <a href="./">← ivex</a>
+    <Shell active="about">
+    <div className="page narrow">
+      <div className="kicker">Documentation</div>
       <h1>How it works</h1>
       <ol>
         <li><b>Upload.</b> An IV stack (TIFF or OME-TIFF, planes × height × width) and an EX image or stack of the same region. Give the pixel sizes in µm, the
@@ -36,5 +39,6 @@ export default function About() {
         <li>Storage and download allowances are small (a free hosting tier), so results expire after 7 days.</li>
       </ul>
     </div>
+    </Shell>
   );
 }

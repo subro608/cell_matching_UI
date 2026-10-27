@@ -7,6 +7,7 @@ import { autoContrast, getOutlines, hasPlane, imageSize, loadRun, store } from '
 import { MIN_PAIRS, apply, fit, invert, isMirrored, linear, looErrors, median, modelMatrix, residuals, rotationOf, scaleOf, sliceFits, toNative } from '../lib/fit';
 import PoseCard from './PoseCard';
 import CropCards from './CropCards';
+import Icon from '../components/Icon';
 import { agreement } from './agreement';
 
 const RANK_COLORS = [[60, 255, 120, 255], [255, 230, 60, 255], [255, 160, 40, 255]];
@@ -31,7 +32,7 @@ function manualAffine(m, ivUm, exUm) {
   return { kind: 'manual', A, t };
 }
 
-export default function Viewer({ b, session = null }) {
+export default function Viewer({ b, session = null, downloads = [] }) {
   const { manifest: M, pose } = b;
   const ivSize = useMemo(() => imageSize(b.iv), [b]), exSize = useMemo(() => imageSize(b.ex), [b]);
   const key = `ivex:${session?.sid || M.title}`;
@@ -278,102 +279,120 @@ export default function Viewer({ b, session = null }) {
   const isConfident = (c) => c.p >= 0.5 && c.mutual;
   const setF = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : Number(e.target.value) }));
 
-  if (!matches) return <div className="splash">Loading matches ({run.label})…</div>;
+  if (!matches) return <div className="splash"><div><div className="spinner" />Loading matches ({run.label})…</div></div>;
+  const zDock = (
+    <div className="zdock">
+      <span className="hint">IV plane</span>
+      <input type="range" min={0} max={M.iv.nz - 1} value={z} onChange={(e) => setZ(Number(e.target.value))} aria-label="IV plane" />
+      <b>z {z}</b><span className="hint">{M.iv.um_z ? `${(z * M.iv.um_z).toFixed(0)} µm · ` : ''}{(matches.byPlane.get(z) || []).length} cells</span>
+    </div>
+  );
+  const saveText = !session ? (M.example ? 'example · saved in this browser' : 'saved in this browser')
+    : saveState.error ? `not saved: ${saveState.error}` : saveState.dirty ? 'unsaved changes' : saveState.at ? `saved ${new Date(saveState.at * 1000).toLocaleTimeString()}` : 'nothing to save yet';
   return (
     <div className="app">
+      <header className="vbar">
+        <a className="brand" href="./" title="ivex home"><span className="mark"><svg width="14" height="14" viewBox="0 0 32 32"><circle cx="11" cy="16" r="6" fill="#04110e" /><circle cx="21" cy="16" r="6" fill="none" stroke="#04110e" strokeWidth="3" /></svg></span></a>
+        <span className="title" title={M.title}>{M.title}</span>
+        {M.example && <span className="pill">example</span>}
+        <span className="sep" />
+        <div className="segctl">{['side', 'overlay'].map((m) => <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{m === 'side' ? 'Side by side' : 'Overlay'}</button>)}</div>
+        {mode === 'overlay' && (
+          <>
+            <div className="segctl">{['blend', 'swipe', 'checker'].map((s) => <button key={s} className={ovl.style === s ? 'on' : ''} onClick={() => setOvl((o) => ({ ...o, style: s, amount: s === 'swipe' ? 0.5 : o.amount }))}>{s === 'checker' ? 'checkerboard' : s}</button>)}</div>
+            {ovl.style !== 'checker'
+              ? <input style={{ width: 110 }} type="range" min={0} max={1} step={0.01} value={ovl.amount} onChange={(e) => setOvl((o) => ({ ...o, amount: Number(e.target.value) }))} aria-label={ovl.style === 'blend' ? 'IV opacity' : 'divider'} />
+              : <input style={{ width: 110 }} type="range" min={16} max={256} step={8} value={ovl.cell} onChange={(e) => setOvl((o) => ({ ...o, cell: Number(e.target.value) }))} aria-label="square size" />}
+          </>
+        )}
+        <label className="row" style={{ margin: 0 }}><input type="checkbox" checked={link} onChange={(e) => setLink(e.target.checked)} />link views</label>
+        <span className="spacer" />
+        <span className={`hint ${saveState.error ? 'bad' : ''}`}>{saveText}</span>
+        {session && saveState.dirty && <button onClick={saveNow}><Icon name="save" />Save</button>}
+        {downloads.map((d) => <a key={d.href} className="btn ghost" href={d.href} download><Icon name="download" />{d.label}</a>)}
+        <button onClick={exportCSV} title="accepted pairs"><Icon name="download" />Pairs CSV</button>
+        <button onClick={exportTransforms} title={`one ${regKind} per IV plane (± ${dz} µm)`}>transforms.json</button>
+        <button onClick={exportJSON}>Export JSON</button>
+      </header>
+
       <aside className="panel left">
         <h1>ivex · IV ↔ EX</h1>
-        <div className="sub">{M.title}</div>
-        {M.example && <div className="hint warn">Example on synthetic data. Your verdicts stay in this browser. <a href="./">Home</a></div>}
+        {M.example && <div className="msg ok" style={{ marginTop: 10 }}>The JY369 example: your verdicts stay in this browser. <a href="?page=new">Run it yourself</a></div>}
         <PoseCard pose={pose} runs={M.runs} runIdx={runIdx} setRunIdx={setRunIdx} poseOk={poseOk} setPoseOk={setPoseOk} manual={manual}
           setManual={(f) => { setManual(f); setMode('overlay'); }} canRematch={!!session && session.canRematch} busy={busy}
           onMatchManual={() => doRematch({ affine: toRows(manualT || manualAffine(manual, M.iv.um_xy, M.ex.um_xy)) }, 'Matching at your orientation')}
           onRunnerUp={(ru) => doRematch({ flip: ru.flip, theta: ru.theta }, 'Matching at the runner-up orientation')} />
         {pose?.inlier_pairs && <label className="row"><input type="checkbox" checked={showInliers} onChange={(e) => setShowInliers(e.target.checked)} />show the pose's inlier pairs (cyan)</label>}
         {msg && <div className={`msg ${msg.ok ? 'ok' : 'bad'}`}>{msg.text}</div>}
-        <section>
-          <h2>In vivo plane</h2>
-          <div className="row"><input type="range" min={0} max={M.iv.nz - 1} value={z} onChange={(e) => setZ(Number(e.target.value))} /><b>z {z}</b></div>
-          <div className="hint">{M.iv.um_z ? `${(z * M.iv.um_z).toFixed(0)} µm · ` : ''}↑/↓ keys · {(matches.byPlane.get(z) || []).length} PMAC queries</div>
-        </section>
-        <section>
-          <h2>Masks</h2>
-          <div className="row">show
-            <select value={agree.k} onChange={(e) => setAgree((a) => ({ ...a, k: Number(e.target.value) }))}>
-              <option value={1}>every cell</option><option value={2}>cells ≥ 2 models agree on</option><option value={3}>cells all 3 models agree on</option>
-            </select>
-          </div>
+        <details className="sec" open>
+          <summary>Masks</summary>
+          <div className="row"><select style={{ flex: 1 }} value={agree.k} onChange={(e) => setAgree((a) => ({ ...a, k: Number(e.target.value) }))}>
+            <option value={1}>Every cell</option><option value={2}>Cells ≥ 2 models agree on</option><option value={3}>Cells all 3 models agree on</option>
+          </select></div>
           {agree.k > 1 && <div className="row hint">same cell = centroids within <input className="num" type="number" min={1} max={20} value={agree.r_um} onChange={(e) => setAgree((a) => ({ ...a, r_um: Number(e.target.value) }))} /> µm</div>}
-          <div className="sub">In vivo</div>{masksPanel('iv')}
-          <div className="sub">Ex vivo</div>{masksPanel('ex')}
-          <div className="hint">Matching uses <b>{run.match_model || M.match_model || matchSet}</b>.</div>
+          <div className="sub" style={{ marginTop: 8 }}>In vivo</div>{masksPanel('iv')}
+          <div className="sub" style={{ marginTop: 8 }}>Ex vivo</div>{masksPanel('ex')}
+          <div className="hint" style={{ marginTop: 6 }}>Matching uses <b>{run.match_model || M.match_model || matchSet}</b>.</div>
           {session && M.models && (
-            <label className="row">re-match with
-              <select disabled={!session.canRematch || busy} value="" onChange={(e) => e.target.value && doRematch({ match_model: e.target.value, ...(run.iv_to_ex_native ? { affine: run.iv_to_ex_native } : {}) }, `Matching with ${e.target.value}`)}>
-                <option value="">choose a mask set…</option>{M.models.filter((m) => m !== (run.match_model || M.match_model)).map((m) => <option key={m} value={m}>{m}</option>)}
+            <div className="row" style={{ marginTop: 6 }}>
+              <select style={{ flex: 1 }} disabled={!session.canRematch || busy} value="" onChange={(e) => e.target.value && doRematch({ match_model: e.target.value, ...(run.iv_to_ex_native ? { affine: run.iv_to_ex_native } : {}) }, `Matching with ${e.target.value}`)}>
+                <option value="">Re-match with another mask set…</option>{M.models.filter((m) => m !== (run.match_model || M.match_model)).map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
-            </label>
+            </div>
           )}
-        </section>
-        <section>
-          <h2>Ex vivo channels</h2>
+        </details>
+        <details className="sec" open>
+          <summary>Ex vivo channels</summary>
           {M.ex.channels.map((ch, c) => (
             <label key={ch} className="row"><input type="checkbox" checked={exVisible[c]} onChange={(e) => setExVisible((v) => v.map((x, i) => (i === c ? e.target.checked : x)))} />{ch}</label>
           ))}
           <div className="hint">{M.ex.projection}</div>
-        </section>
-        <section>
-          <h2>View</h2>
-          <div className="seg">
-            {['side', 'overlay'].map((m) => <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{m === 'side' ? 'Side by side' : 'Overlay (O)'}</button>)}
-          </div>
-          {mode === 'overlay' && (
-            <>
-              <div className="seg">{['blend', 'swipe', 'checker'].map((s) => <button key={s} className={ovl.style === s ? 'on' : ''} onClick={() => setOvl((o) => ({ ...o, style: s, amount: s === 'swipe' ? 0.5 : o.amount }))}>{s === 'checker' ? 'checkerboard' : s}</button>)}</div>
-              {ovl.style !== 'checker' ? <div className="row">{ovl.style === 'blend' ? 'IV opacity' : 'divider'} <input type="range" min={0} max={1} step={0.01} value={ovl.amount} onChange={(e) => setOvl((o) => ({ ...o, amount: Number(e.target.value) }))} /></div>
-                : <div className="row">squares <input type="range" min={16} max={256} step={8} value={ovl.cell} onChange={(e) => setOvl((o) => ({ ...o, cell: Number(e.target.value) }))} /><b>{ovl.cell}px</b></div>}
-            </>
-          )}
-          <label className="row"><input type="checkbox" checked={link} onChange={(e) => setLink(e.target.checked)} />Link views through the transform</label>
-          <label className="row">Transform
-            <select value={source} onChange={(e) => setSource(e.target.value)} disabled={!!manualT}>
-              <option value="auto">fit if enough pairs, else pose</option><option value="fit">fit only</option><option value="pose">pose only</option><option value="none">none</option>
-            </select>
-          </label>
+        </details>
+        <details className="sec">
+          <summary>Transform</summary>
+          <div className="row"><select style={{ flex: 1 }} value={source} onChange={(e) => setSource(e.target.value)} disabled={!!manualT}>
+            <option value="auto">Fit if enough pairs, else pose</option><option value="fit">Fit only</option><option value="pose">Pose only</option><option value="none">None</option>
+          </select></div>
           {manualT && <div className="hint warn">Using your manual orientation (Set manually is on).</div>}
-        </section>
-        <section className="keys"><h2>Keys</h2>click IV cell · <b>1–9</b> candidate · click EX to pick · <b>A</b> accept · <b>R</b> reject · <b>U</b> unsure · <b>N/P</b> next/prev · <b>O</b> overlay · <b>↑/↓</b> plane</section>
+        </details>
+        <details className="sec">
+          <summary>Keyboard</summary>
+          <div className="keys">click an IV cell · <b>1–9</b> candidate · click EX to pick<br /><b>A</b> accept · <b>R</b> reject · <b>U</b> unsure<br /><b>N</b>/<b>P</b> next / previous · <b>O</b> overlay · <b>↑</b>/<b>↓</b> plane</div>
+        </details>
       </aside>
 
       <main className={`views ${mode}`}>
         {mode === 'side' && (
           <ImageView title={`In vivo · z ${z}`} src={b.src} image={b.iv} selection={ivSel} contrast={[ivContrast]} colors={[[255, 255, 255]]} channelsVisible={[true]}
             maskSets={M.iv.mask_sets} maskVisible={maskVis.iv} z={z} viewState={ivView} onViewState={onIvView} onClick={onIvClick}
-            highlight={ivHighlight} markers={ivMarkers} only={only.iv} />
+            highlight={ivHighlight} markers={ivMarkers} only={only.iv}>{zDock}</ImageView>
         )}
-        <ImageView title={mode === 'overlay' ? `Overlay: IV z ${z} (green) on EX (magenta) · ${ovl.style}` : 'Ex vivo'} src={b.src} image={b.ex} selection={exSel} contrast={exContrast}
+        <ImageView title={mode === 'overlay' ? `IV z ${z} (green) on EX (magenta) · ${ovl.style}` : 'Ex vivo'} src={b.src} image={b.ex} selection={exSel} contrast={exContrast}
           colors={exColors} channelsVisible={exVisible} maskSets={M.ex.mask_sets} maskVisible={maskVis.ex} viewState={exView} onViewState={onExView}
           onClick={onExClick} highlight={exHighlight} markers={exMarkers} lines={exLines} only={only.ex}>
           {mode === 'overlay' && T && <OverlayCanvas image={b.iv} selection={ivSel} contrast={[ivContrast]} colors={[[0, 255, 0]]} matrix={ivMatrix} viewState={exView} mode={ovl.style} amount={ovl.amount} cell={ovl.cell} />}
           {mode === 'overlay' && T && ovl.style === 'swipe' && <div className="swipe-line" style={{ left: `${(ovl.amount * 100).toFixed(1)}%` }} />}
           {mode === 'overlay' && !T && <div className="view-note">No transform yet: accept ≥ 2 pairs, use the pose, or set it manually.</div>}
           {mode === 'overlay' && reg.T?.kind === 'tps' && !manualT && source !== 'pose' && <div className="view-note">The overlay shows the affine part of the TPS.</div>}
+          {mode === 'overlay' && zDock}
         </ImageView>
       </main>
 
       <aside className="panel right">
         <section>
           <h2>Verification</h2>
-          <div className="counts">accepted <b>{counts.accepted || 0}</b> · rejected <b>{counts.rejected || 0}</b> · unsure <b>{counts.unsure || 0}</b></div>
+          <div className="counts sr" aria-live="polite">accepted <b>{counts.accepted || 0}</b> · rejected <b>{counts.rejected || 0}</b> · unsure <b>{counts.unsure || 0}</b></div>
+          <div className="stat3"><div className="a"><b>{counts.accepted || 0}</b><span>accepted</span></div><div className="r"><b>{counts.rejected || 0}</b><span>rejected</span></div><div className="u"><b>{counts.unsure || 0}</b><span>unsure</span></div></div>
           <div className="progress" title={`${done} of ${queue.length} in this queue`}><div style={{ width: `${queue.length ? (100 * done) / queue.length : 0}%` }} /></div>
-          <div className="hint">{done} of {queue.length} cells in this queue · {matches.cells.length} PMAC queries in all</div>
-          <label className="row"><input type="checkbox" checked={filters.planeOnly} onChange={setF('planeOnly')} />this plane only</label>
-          {!filters.planeOnly && <div className="row">planes <input className="num" type="number" min={0} max={M.iv.nz - 1} value={filters.z0} onChange={setF('z0')} /> to <input className="num" type="number" min={0} max={M.iv.nz - 1} value={filters.z1} onChange={setF('z1')} /></div>}
-          <div className="row">P(top1) ≥ <input type="range" min={0} max={0.95} step={0.05} value={filters.minP} onChange={setF('minP')} /><b>{(filters.minP * 100).toFixed(0)}%</b></div>
-          <label className="row"><input type="checkbox" checked={filters.mutual} onChange={setF('mutual')} />mutual best only</label>
-          <div className="seg"><button onClick={() => step(-1)}>◀ Prev</button><button onClick={() => step(1)}>Next ▶</button></div>
-          {session && <div className={`hint ${saveState.error ? 'bad' : ''}`}>{saveState.error ? `Not saved: ${saveState.error}` : saveState.dirty ? 'Unsaved changes (saved automatically)' : saveState.at ? `Saved ${new Date(saveState.at * 1000).toLocaleTimeString()}` : 'Nothing to save yet'}
-            {saveState.dirty && <button className="link" onClick={saveNow}>save now</button>}</div>}
+          <div className="row" style={{ justifyContent: 'space-between' }}><span className="hint">{done} / {queue.length} in queue · {matches.cells.length} queries</span>
+            <span className="seg" style={{ margin: 0 }}><button onClick={() => step(-1)} title="previous (P)">◀</button><button onClick={() => step(1)} title="next (N)">Next ▶</button></span></div>
+          <details className="sec" style={{ borderBottom: 0, paddingBottom: 0 }}>
+            <summary>Queue filters</summary>
+            <label className="row"><input type="checkbox" checked={filters.planeOnly} onChange={setF('planeOnly')} />this plane only</label>
+            {!filters.planeOnly && <div className="row">planes <input className="num" type="number" min={0} max={M.iv.nz - 1} value={filters.z0} onChange={setF('z0')} /> to <input className="num" type="number" min={0} max={M.iv.nz - 1} value={filters.z1} onChange={setF('z1')} /></div>}
+            <div className="row">P(top1) ≥ <input type="range" min={0} max={0.95} step={0.05} value={filters.minP} onChange={setF('minP')} /><b>{(filters.minP * 100).toFixed(0)}%</b></div>
+            <label className="row"><input type="checkbox" checked={filters.mutual} onChange={setF('mutual')} />mutual best only</label>
+          </details>
         </section>
         {sel ? (
           <section>
@@ -381,14 +400,19 @@ export default function Viewer({ b, session = null }) {
             <div className="hint">({sel.x.toFixed(0)}, {sel.y.toFixed(0)}) px · P(top1) {(100 * sel.p).toFixed(1)}% {sel.mutual ? '· mutual best' : ''}
               {verdicts[`${sel.z}:${sel.id}`] && <b> · {verdicts[`${sel.z}:${sel.id}`].status}</b>}</div>
             <CropCards b={b} sel={sel} cand={cand} matches={matches} T={T} ivContrast={ivContrast} exContrast={exContrast} rank={typeof rank === 'number' ? rank : -1} onPick={setRank} />
+            <div className="seg verdict">
+              <button className="acc" onClick={() => verdict('accepted')}><Icon name="check" />Accept (A)</button>
+              <button className="rej" onClick={() => verdict('rejected')}><Icon name="x" />Reject (R)</button>
+              <button onClick={() => verdict('unsure')}>Unsure (U)</button>
+            </div>
             <table className="cands">
-              <thead><tr><th>#</th><th>EX</th><th>P</th><th>appear.</th><th>loc.</th></tr></thead>
+              <thead><tr><th>#</th><th>EX cell</th><th>P</th><th>appear.</th><th>loc.</th></tr></thead>
               <tbody>
                 {cand.map((i, k) => {
                   const e = matches.ex[i], ai = sel.appearanceIdx.indexOf(i), li = sel.locationIdx.indexOf(i);
                   return (
                     <tr key={i} className={k === rank ? 'on' : ''} onClick={() => setRank(k)}>
-                      <td style={{ color: `rgb(${rankColor(k).slice(0, 3).join(',')})` }}>{k + 1}</td>
+                      <td style={{ color: `rgb(${rankColor(k).slice(0, 3).join(',')})`, fontWeight: 700 }}>{k + 1}</td>
                       <td>{e.set === 'nuclei_dapi' ? 'DAPI' : e.set} {e.maskId}</td><td>{pct(sel.combined[k])}</td>
                       <td>{ai >= 0 ? `#${ai + 1}` : '–'}</td><td>{li >= 0 ? `#${li + 1}` : '–'}</td>
                     </tr>
@@ -397,14 +421,9 @@ export default function Viewer({ b, session = null }) {
               </tbody>
             </table>
             {typeof rank === 'object' && <div className="hint">Manual pick: EX {matches.ex[rank.manual].set} {matches.ex[rank.manual].maskId}</div>}
-            <div className="seg verdict">
-              <button className="acc" onClick={() => verdict('accepted')}>Accept (A)</button>
-              <button className="rej" onClick={() => verdict('rejected')}>Reject (R)</button>
-              <button onClick={() => verdict('unsure')}>Unsure (U)</button>
-            </div>
-            <div className="hint">PMAC's scores are suggestions; nothing is accepted for you.</div>
+            <div className="hint" style={{ marginTop: 6 }}>PMAC's scores are suggestions; nothing is accepted for you.</div>
           </section>
-        ) : <section className="hint">Click an in vivo cell (or press N) to see PMAC's candidates.</section>}
+        ) : <section><div className="empty"><div><Icon name="target" size={22} /><div style={{ marginTop: 6 }}>Click an in vivo cell, or press <kbd>N</kbd>,<br />to see PMAC's candidates.</div></div></div></section>}
         <section>
           <h2>Registration</h2>
           <div className="row">
@@ -423,11 +442,6 @@ export default function Viewer({ b, session = null }) {
               </div>
             </div>
           ) : <div className="hint">Accept at least {MIN_PAIRS[regKind]} pairs to fit ({pairs.length} so far).</div>}
-        </section>
-        <section>
-          <h2>Export</h2>
-          <div className="seg"><button onClick={exportCSV}>Pairs CSV</button><button onClick={exportTransforms}>transforms.json</button><button onClick={exportJSON}>Export JSON</button></div>
-          <div className="hint">transforms.json: one {regKind} per IV plane (± {dz} µm; global fallback), micrometres.</div>
         </section>
       </aside>
     </div>

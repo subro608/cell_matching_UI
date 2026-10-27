@@ -14,11 +14,12 @@ The sbatch wrapper resubmits this poller before the cpu_short 6 h limit (scronta
 Scratch layout: ROOT/<sid>/{raw,analysis,web,job.json}, ROOT/_worker/state.json (claimed / finished jobs).
 usage: python poller.py [--once] [--max-seconds N]"""
 from __future__ import annotations
-import argparse, json, os, re, subprocess, sys, time
+import argparse, json, os, re, shutil, subprocess, sys, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = Path(os.environ.get('IVEX_SESSIONS', '/scratch/sd5963/ivex-sessions')); WSTATE = ROOT / '_worker/state.json'
+EXAMPLES = Path(os.environ.get('IVEX_EXAMPLES', '/scratch/sd5963/ivex-match-data/examples'))       # <name>/{iv,ex}.ome.tif
 NODE = os.environ.get('IVEX_NODE', '/scratch/sd5963/conda_envs/neuro_env_311/bin/node')
 TOKEN_FILE = Path(os.environ.get('IVEX_BLOB_TOKEN_FILE', '/scratch/sd5963/.secrets/vercel_blob_ivex_rw'))
 POLL_S, HEARTBEAT_S, RETAIN_DAYS = 60, 3 * 3600, 7
@@ -83,12 +84,16 @@ def slurm_state(job):
 def claim(job, st):
     sid = job['sid']; assert SID.match(sid), f'bad session id {sid!r}'; d = ROOT / sid; (d / 'raw').mkdir(parents=True, exist_ok=True)
     if job['kind'] == 'analyze':
-        spec = blob_json(f'sessions/{sid}/request.json', fresh=True); assert spec, 'request.json missing'
-        spec = dict(spec['spec'], sid=sid, kind='analyze')
-        for side in ('iv', 'ex'):
-            blob('get', f'sessions/{sid}/raw/{side}.tif', str(d / 'raw' / f'{side}.tif'), '--fresh')
-            assert (d / 'raw' / f'{side}.tif').stat().st_size > 0, f'{side}.tif is empty'
-        blob('del', f'sessions/{sid}/raw/iv.tif', f'sessions/{sid}/raw/ex.tif', check=False)     # free; scratch holds the copy now
+        req = blob_json(f'sessions/{sid}/request.json', fresh=True); assert req, 'request.json missing'
+        spec = dict(req['spec'], sid=sid, kind='analyze')
+        if req.get('example'):                                                                     # inputs from the worker's own copy
+            src = EXAMPLES / req['example']; assert re.match(r'^[a-z0-9_-]+$', req['example']) and src.is_dir(), f'unknown example {req["example"]}'
+            for side in ('iv', 'ex'): shutil.copyfile(src / f'{side}.ome.tif', d / 'raw' / f'{side}.tif')
+        else:
+            for side in ('iv', 'ex'):
+                blob('get', f'sessions/{sid}/raw/{side}.tif', str(d / 'raw' / f'{side}.tif'), '--fresh')
+                assert (d / 'raw' / f'{side}.tif').stat().st_size > 0, f'{side}.tif is empty'
+            blob('del', f'sessions/{sid}/raw/iv.tif', f'sessions/{sid}/raw/ex.tif', check=False)     # free; scratch holds the copy now
     elif job['kind'] in ('rematch', 'restore'):
         assert (d / 'analysis/meta.json').exists(), 'no analysis on the worker for this session'
         spec = dict(job.get('spec') or {}, sid=sid, kind=job['kind'])

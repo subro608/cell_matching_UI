@@ -26,8 +26,14 @@ function cleanSpec(s) {
 
 export default handler(async ({ req, body, query }) => {
   if (req.method === 'POST') {
-    const spec = cleanSpec(body.spec); const invite = await useInvite(body.invite); const sid = newId(18);
-    await writeJSON(`sessions/${sid}/request.json`, { spec, created: Date.now() / 1000, invite, rematches: 0 }, { maxAge: 3600 });
+    let spec, example = null;
+    if (body.example) {            // the worker takes the inputs from its own copy of the example; nothing to upload
+      example = String(body.example); if (!/^[a-z0-9_-]{1,32}$/.test(example)) throw new HttpError(400, 'Bad example name');
+      const info = await readJSON(`examples/${example}/info.json`); if (!info) throw new HttpError(404, 'No such example');
+      spec = { ...info.data.spec, title: `${info.data.title} (your run)` };
+    } else spec = cleanSpec(body.spec);
+    const invite = await useInvite(body.invite); const sid = newId(18);
+    await writeJSON(`sessions/${sid}/request.json`, { spec, example, created: Date.now() / 1000, invite, rematches: 0 }, { maxAge: 3600 });
     await setState(sid, { status: 'created', text: 'Waiting for the uploads' });
     return { sid };
   }

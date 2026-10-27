@@ -53,9 +53,9 @@ export default function PoseCard({ pose, runs, runIdx, setRunIdx, poseOk, setPos
         </>
       )}
       {runs.length > 1 && (
-        <label className="row">Matches at
+        <div className="field" style={{ margin: '10px 0 4px' }}><label>Matches at</label>
           <select value={runIdx} onChange={(e) => setRunIdx(Number(e.target.value))}>{runs.map((r, i) => <option key={r.name} value={i}>{r.label}</option>)}</select>
-        </label>
+        </div>
       )}
       <div className="seg">
         <button className={poseOk === true ? 'on' : ''} onClick={() => setPoseOk(true)}>Looks right</button>

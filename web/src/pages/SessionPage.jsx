@@ -4,6 +4,8 @@ import Viewer from '../viewer/Viewer';
 import { getSession, rematch, restore, saveVerify } from '../lib/api';
 import { loadBundle, signedSource } from '../lib/data';
 import { WorkerBanner } from './Home';
+import Shell from '../components/Shell';
+import Icon from '../components/Icon';
 
 const STEPS = [['uploaded', 'Uploaded'], ['queued', 'Waiting for the HPC worker'], ['queued_hpc', 'Waiting for a GPU on NYU HPC'], ['masks', 'Cell masks (3 Cellpose models)'],
   ['pose', 'PMAC blind pose'], ['match', 'PMAC matching'], ['export', 'Preparing the viewer files'], ['done', 'Done']];
@@ -19,22 +21,25 @@ function stepIndex(st) {
 function Status({ s, onRestore }) {
   const st = s.state, at = stepIndex(st);
   return (
-    <div className="page">
-      <a href="./">← ivex</a>
+    <Shell worker={s.worker}>
+    <div className="page narrow">
+      <div className="kicker">Session</div>
       <h1>{s.spec.title}</h1>
-      <p className="hint">Session <code>{s.sid}</code> · created {new Date(s.created * 1000).toLocaleString()} · bookmark this page; anyone with the link can open it.</p>
+      <p className="hint"><code>{s.sid}</code> · created {new Date(s.created * 1000).toLocaleString()} · bookmark this page; anyone with the link can open it.</p>
       <WorkerBanner worker={s.worker} />
-      {st.status === 'failed' && <div className="card"><h2 style={{ marginTop: 0 }}>The analysis failed</h2><p>{st.text}</p>{st.error && <pre className="err">{st.error}</pre>}
+      {st.status === 'failed' && <div className="card"><h2><Icon name="x" /> The analysis failed</h2><p>{st.text}</p>{st.error && <pre className="err">{st.error}</pre>}
         <p className="hint">Check the pixel sizes and channels, then start a new analysis. If it keeps failing, send this session id to the person who gave you the invite.</p></div>}
-      {st.status === 'expired' && <div className="card"><h2 style={{ marginTop: 0 }}>Files expired</h2><p>{st.text}</p><button onClick={onRestore}>Restore the files</button></div>}
+      {st.status === 'expired' && <div className="card"><h2>Files expired</h2><p>{st.text}</p><button className="primary" onClick={onRestore}>Restore the files</button></div>}
       {at >= 0 && (
         <div className="card">
-          <ol className="steps">{STEPS.map(([k, label], i) => <li key={k} className={i < at ? 'done' : i === at ? 'now' : ''}>{label}{i === at && st.text && st.text !== label ? ` · ${st.text}` : ''}{i === at && st.slurm ? ` · Slurm job ${st.slurm}` : ''}</li>)}</ol>
+          <h2>Progress</h2>
+          <ol className="steps">{STEPS.map(([k, label], i) => <li key={k} className={i < at ? 'done' : i === at ? 'now' : ''}>{label}{i === at && st.text && st.text !== label ? <span className="hint"> · {st.text}</span> : ''}{i === at && st.slurm ? <span className="hint"> · Slurm {st.slurm}</span> : ''}</li>)}</ol>
           {st.status === 'created' && <p className="hint">The uploads did not finish. Start again from <a href="?page=new">New analysis</a>.</p>}
-          <p className="hint">This page refreshes by itself. The analysis itself usually takes 5–30 minutes once it has a GPU.</p>
+          <p className="hint" style={{ marginBottom: 0 }}>This page refreshes by itself. The analysis takes about 5–30 minutes once it has a GPU.</p>
         </div>
       )}
     </div>
+    </Shell>
   );
 }
 

@@ -1,8 +1,9 @@
 """Cell masks for the three models the app shows. Run inside the matching Cellpose environment (they cannot share one):
     cyto2_ft, cyto3_ft  Cellpose 3.1 (venvs/cellpose_v3_env)   pyramidal_{iv,ex}_cyto{2,3}_v6public_ft (separate IV / EX fine-tunes)
     cpsam               Cellpose 4.2 (venvs/cellpose_v42_env)  dk5288 all_cpsam_clean_gt_best
-IV: 3D with z anisotropy and fixed intensity limits [0, p99 of the stack] (as registration/segmentation/iv/full_cyto23_3d_ft, the
-settings the fine-tunes were made for: 2D per plane finds ~1/8 of the cells on JY369); 2D per plane when the z step is unknown.
+IV: 3D with z anisotropy, intensities clipped to [0, 1] over [0, p99 of the stack], normalize=False (full_cellpose_3d_jy369ft.py,
+which made registration/segmentation/iv/full_cyto23_3d_ft; 2D with Cellpose's own normalization finds ~1/10 of the cells on JY369);
+2D per plane when the z step is unknown.
 EX: 2D on the band MIP (as seg_ex.py). Masks stay on the native grid; centroids are converted to the ivex working grids later.
 
 usage: python -m ivexmatch.segment --model cyto3_ft --side iv --input iv.npy --um 0.68 [--um_z 3] --diameter_um 11 --out masks_iv_cyto3_ft.npz
@@ -38,13 +39,14 @@ def run(model_name, side, image, um, diameter_um, gpu=True, um_z=None, log=print
     kw = dict(diameter=diam, cellprob_threshold=CELLPROB[side])
     if spec['version'] == 3: kw['channels'] = [0, 0]
     t0 = time.time(); three_d = side == 'iv' and image.ndim == 3 and len(image) > 1 and um_z
-    if side == 'iv':
-        sample = np.asarray(image[:: max(1, len(image) // 8)] if image.ndim == 3 else image, np.float32)
-        kw['normalize'] = dict(lowhigh=[0.0, float(np.percentile(sample, 99))])
+    image = np.asarray(image, np.float32)
+    if side == 'iv':                       # full_cellpose_3d_jy369ft.py: clip((v - lo) / (hi - lo), 0, 1), then normalize=False
+        hi = float(np.percentile(image[:: max(1, len(image) // 8)] if image.ndim == 3 else image, 99))
+        image = np.clip(image / max(hi, 1e-6), 0, 1); kw['normalize'] = False
     if three_d:
-        kw.update(do_3D=True, z_axis=0, anisotropy=float(um_z) / float(um), min_size=15)
+        kw.update(do_3D=True, z_axis=0, anisotropy=float(um_z) / float(um), min_size=15, batch_size=8, tile_overlap=0.1)
         if spec['version'] == 3: kw['channel_axis'] = None
-        labels = model.eval(np.asarray(image, np.float32), **kw)[0].astype(np.uint32)
+        labels = model.eval(image, **kw)[0].astype(np.uint32)
         cells = np.concatenate([centroids(labels[z], z) for z in range(len(labels))])
     else:
         planes = [image] if image.ndim == 2 else list(image); labels, cells = [], []

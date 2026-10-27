@@ -1,4 +1,4 @@
-// Routes by query string (works on any static host): ?data=URL (local bundle folder) · ?s=SESSION · ?page=new · ?page=about · home.
+// Routes by query string (works on any static host): ?data=URL (local bundle folder) · ?s=SESSION · ?page=new|about|example · home.
 import { useEffect, useState } from 'react';
 import Viewer from './viewer/Viewer';
 import { folderSource, loadBundle } from './lib/data';
@@ -6,6 +6,7 @@ import Home from './pages/Home';
 import Upload from './pages/Upload';
 import SessionPage from './pages/SessionPage';
 import About from './pages/About';
+import ExamplePage from './pages/ExamplePage';
 
 const params = new URLSearchParams(window.location.search);
 
@@ -24,5 +25,6 @@ export default function App() {
   if (params.get('s')) return <SessionPage sid={params.get('s')} />;
   if (params.get('page') === 'new') return <Upload />;
   if (params.get('page') === 'about') return <About />;
+  if (params.get('page') === 'example') return <ExamplePage />;
   return <Home />;
 }

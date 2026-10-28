@@ -166,3 +166,5 @@ details.sec > summary::after { content: '+'; font-weight: 400; } details.sec[ope
   .grid2, .figure .panels { grid-template-columns: 1fr; } .topnav { padding: 0 16px; } .topnav nav { display: none; } .page { padding: 24px 16px 60px; } .page h1 { font-size: 28px; }
   .vbar { flex-wrap: wrap; height: auto; padding: 6px 10px; }
 }
+.res-row { grid-template-columns: 1fr auto auto 20px; align-items: center; } .res-row button.x { padding: 0 5px; height: 18px; font-size: 13px; line-height: 1; border-color: transparent; background: transparent; color: var(--muted); }
+.res-row button.x:hover { color: var(--bad); border-color: var(--line-2); }

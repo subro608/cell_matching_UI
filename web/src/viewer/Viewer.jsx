@@ -170,12 +170,27 @@ export default function Viewer({ b, session = null, downloads = [] }) {
     if (c && c.z !== z) setZ(c.z);
     if (c && centerEx && matches) { const e = matches.ex[c.combinedIdx[0]]; setExView((v) => v && ({ ...v, target: [e.x, e.y, 0] })); }
   }, [matches, z]);
+  // every verdict change is recorded so it can be undone (Z / Ctrl+Z): { key, prev } per change, newest last
+  const history = useRef([]);
+  const [undoCount, setUndoCount] = useState(0);
+  const record = (key) => { history.current.push({ run: run.name, key, prev: verdicts[key] }); setUndoCount(history.current.length); };
   const verdict = useCallback((status) => {
     if (!sel) return;
-    setVerdicts((v) => ({ ...v, [`${sel.z}:${sel.id}`]: { status, ex: chosen, rank: typeof rank === 'object' ? null : rank, t: Date.now() } }));
+    const key = `${sel.z}:${sel.id}`; record(key);
+    setVerdicts((v) => ({ ...v, [key]: { status, ex: chosen, rank: typeof rank === 'object' ? null : rank, t: Date.now() } }));
     const i = queue.indexOf(sel), next = queue.slice(i + 1).find((c) => !verdicts[`${c.z}:${c.id}`]);
     if (next) select(next);
-  }, [sel, chosen, rank, queue, verdicts, select, setVerdicts]);
+  }, [sel, chosen, rank, queue, verdicts, select, setVerdicts]); // eslint-disable-line react-hooks/exhaustive-deps
+  const clearVerdict = useCallback((key) => {
+    if (!verdicts[key]) return;
+    record(key); setVerdicts((v) => { const o = { ...v }; delete o[key]; return o; });
+  }, [verdicts, setVerdicts]); // eslint-disable-line react-hooks/exhaustive-deps
+  const undo = useCallback(() => {
+    const h = history.current.filter((x) => x.run === run.name).pop(); if (!h) return;
+    history.current.splice(history.current.lastIndexOf(h), 1); setUndoCount(history.current.length);
+    setVerdicts((v) => { const o = { ...v }; if (h.prev) o[h.key] = h.prev; else delete o[h.key]; return o; });
+    const c = matches?.byKey.get(h.key); if (c) select(c);
+  }, [run.name, setVerdicts, matches, select]);
   const step = useCallback((d) => {
     if (!queue.length) return;
     const i = sel ? queue.indexOf(sel) : -1; select(queue[(i + d + queue.length) % queue.length]);
@@ -185,7 +200,9 @@ export default function Viewer({ b, session = null, downloads = [] }) {
     const onKey = (e) => {
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
       const k = e.key.toLowerCase();
-      if (k === 'a') verdict('accepted'); else if (k === 'r') verdict('rejected'); else if (k === 'u') verdict('unsure');
+      if (k === 'z' || ((e.ctrlKey || e.metaKey) && k === 'z')) undo();
+      else if ((k === 'backspace' || k === 'delete') && sel) clearVerdict(`${sel.z}:${sel.id}`);
+      else if (k === 'a') verdict('accepted'); else if (k === 'r') verdict('rejected'); else if (k === 'u') verdict('unsure');
       else if (k === 'n' || k === 'arrowright') step(1); else if (k === 'p' || k === 'arrowleft') step(-1);
       else if (k === 'o') setMode((m) => (m === 'side' && canOverlay ? 'overlay' : 'side'));
       else if (/^[1-9]$/.test(k) && sel && Number(k) <= cand.length) setRank(Number(k) - 1);
@@ -194,7 +211,7 @@ export default function Viewer({ b, session = null, downloads = [] }) {
       e.preventDefault();
     };
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
-  }, [verdict, step, sel, cand, M, canOverlay]);
+  }, [verdict, step, sel, cand, M, canOverlay, undo, clearVerdict]);
 
   const onIvClick = ({ x, y }) => {
     const plane = matches?.byPlane.get(z) || [];
@@ -365,7 +382,7 @@ export default function Viewer({ b, session = null, downloads = [] }) {
         </details>
         <details className="sec">
           <summary>Keyboard</summary>
-          <div className="keys">click an IV cell · <b>1–9</b> candidate · click EX to pick<br /><b>A</b> accept · <b>R</b> reject · <b>U</b> unsure<br /><b>N</b>/<b>P</b> next / previous · <b>O</b> overlay · <b>↑</b>/<b>↓</b> plane</div>
+          <div className="keys">click an IV cell · <b>1–9</b> candidate · click EX to pick<br /><b>A</b> accept · <b>R</b> reject · <b>U</b> unsure<br /><b>Z</b> undo last · <b>⌫</b> clear this cell's verdict<br /><b>N</b>/<b>P</b> next / previous · <b>O</b> overlay · <b>↑</b>/<b>↓</b> plane</div>
         </details>
       </aside>
 
@@ -392,6 +409,7 @@ export default function Viewer({ b, session = null, downloads = [] }) {
           <div className="stat3"><div className="a"><b>{counts.accepted || 0}</b><span>accepted</span></div><div className="r"><b>{counts.rejected || 0}</b><span>rejected</span></div><div className="u"><b>{counts.unsure || 0}</b><span>unsure</span></div></div>
           <div className="progress" title={`${done} of ${queue.length} in this queue`}><div style={{ width: `${queue.length ? (100 * done) / queue.length : 0}%` }} /></div>
           <div className="row" style={{ justifyContent: 'space-between' }}><span className="hint">{done} / {queue.length} in queue · {matches.cells.length} queries</span>
+            <button onClick={undo} disabled={!history.current.some((x) => x.run === run.name)} title="Undo the last verdict (Z)" data-n={undoCount}>Undo</button>
             <span className="seg" style={{ margin: 0 }}><button onClick={() => step(-1)} title="previous (P)">◀</button><button onClick={() => step(1)} title="next (N)">Next ▶</button></span></div>
           <details className="sec" style={{ borderBottom: 0, paddingBottom: 0 }}>
             <summary>Queue filters</summary>
@@ -405,7 +423,13 @@ export default function Viewer({ b, session = null, downloads = [] }) {
           <section>
             <h2>IV cell {sel.id} · z {sel.z} {isConfident(sel) && <span className="badge">confident</span>}</h2>
             <div className="hint">({sel.x.toFixed(0)}, {sel.y.toFixed(0)}) px · P(top1) {(100 * sel.p).toFixed(1)}% {sel.mutual ? '· mutual best' : ''}
-              {verdicts[`${sel.z}:${sel.id}`] && <b> · {verdicts[`${sel.z}:${sel.id}`].status}</b>}</div>
+            </div>
+            {verdicts[`${sel.z}:${sel.id}`] && (
+              <div className={`msg ${verdicts[`${sel.z}:${sel.id}`].status === 'accepted' ? 'ok' : verdicts[`${sel.z}:${sel.id}`].status === 'rejected' ? 'bad' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ flex: 1 }}>Marked <b>{verdicts[`${sel.z}:${sel.id}`].status}</b>{verdicts[`${sel.z}:${sel.id}`].status === 'accepted' && matches.ex[verdicts[`${sel.z}:${sel.id}`].ex] ? ` with EX ${matches.ex[verdicts[`${sel.z}:${sel.id}`].ex].maskId}` : ''}. Choose again to change it.</span>
+                <button onClick={() => clearVerdict(`${sel.z}:${sel.id}`)} title="Backspace">Clear</button>
+              </div>
+            )}
             <div className="seg verdict">
               <button className="acc" onClick={() => verdict('accepted')}><Icon name="check" />Accept (A)</button>
               <button className="rej" onClick={() => verdict('rejected')}><Icon name="x" />Reject (R)</button>
@@ -431,7 +455,8 @@ export default function Viewer({ b, session = null, downloads = [] }) {
               <div>RMS <b>{reg.rms.toFixed(1)} µm</b> · leave-one-out median <b>{Number.isFinite(reg.loo) ? `${reg.loo.toFixed(1)} µm` : '–'}</b></div>
               <div className="residuals">
                 {reg.all.map((w) => (
-                  <div key={w.key} className="res-row" onClick={() => select(w.p.cell)}><span>{w.key}</span><span>{w.r.toFixed(1)} µm</span><span className="hint">LOO {Number.isFinite(w.loo) ? w.loo.toFixed(1) : '–'}</span></div>
+                  <div key={w.key} className="res-row" onClick={() => select(w.p.cell)}><span>{w.key}</span><span>{w.r.toFixed(1)} µm</span><span className="hint">LOO {Number.isFinite(w.loo) ? w.loo.toFixed(1) : '–'}</span>
+                    <button className="x" title="Remove this pair" onClick={(e) => { e.stopPropagation(); clearVerdict(w.key); }}>×</button></div>
                 ))}
               </div>
             </div>

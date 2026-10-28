@@ -33,11 +33,11 @@ export default function Home() {
               cell-to-cell matches with PMAC, and turns the pairs you verify into a slice-wise registration.</p>
             <div className="actions">
               <a className="btn primary lg" href="?page=new"><Icon name="upload" />Start an analysis</a>
-              <a className="btn ghost lg" href="?page=example"><Icon name="eye" />Explore the JY369 example</a>
+              <a className="btn ghost lg" href="?page=example"><Icon name="eye" />Explore the JY195 example</a>
             </div>
           </div>
           <div className="hero-art">
-            {thumb('iv') ? <><img className="a" src={thumb('iv')} alt="In vivo max projection (JY369)" /><img className="b" src={thumb('ex')} alt="Ex vivo GFP + DAPI (JY369)" />
+            {thumb('iv') ? <><img className="a" src={thumb('iv')} alt="In vivo max projection (JY195)" /><img className="b" src={thumb('ex')} alt="Ex vivo region (JY195)" />
               <span className="tag" style={{ left: '8%', top: '4%' }}>in vivo · 2-photon</span><span className="tag" style={{ right: '8%', bottom: '4%' }}>ex vivo · confocal</span></>
               : <div className="splash"><div><div className="spinner" />loading example…</div></div>}
           </div>

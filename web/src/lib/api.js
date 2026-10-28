@@ -23,5 +23,5 @@ export async function uploadFile(sid, side, file, onProgress) {
     multipart: false, onUploadProgress: (e) => onProgress?.(e.percentage / 100),
   });
 }
-export const getExample = (name = 'jy369') => call(`example?name=${encodeURIComponent(name)}`);
-export const startExample = (invite, name = 'jy369') => call('session', { invite, example: name });
+export const getExample = (name = 'jy195') => call(`example?name=${encodeURIComponent(name)}`);
+export const startExample = (invite, name = 'jy195') => call('session', { invite, example: name });

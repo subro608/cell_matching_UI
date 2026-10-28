@@ -1,10 +1,10 @@
 // New analysis: drop the two files (read locally for size, channels, pixel sizes and previews), describe them, upload, submit.
-// Or run the JY369 example: the worker uses its own copy, nothing is uploaded.
+// No data: the JY195 example card links to the finished example (Explore) and its files.
 import { useEffect, useRef, useState } from 'react';
 import Shell from '../components/Shell';
 import Icon from '../components/Icon';
 import { inspectTiff, previewMip } from '../lib/tiff';
-import { createSession, startExample, submit, uploadFile } from '../lib/api';
+import { createSession, getExample, submit, uploadFile } from '../lib/api';
 import { store } from '../lib/data';
 
 const LIMITS = { fileBytes: 900 * 2 ** 20, ivVoxels: 400e6, exPixels: 120e6 };
@@ -47,26 +47,21 @@ function DropZone({ side, info, setInfo, error }) {
   );
 }
 
-function ExampleRun() {
-  const [invite, setInvite] = useState(''), [state, setState] = useState(null);
-  const go = async () => {
-    setState('running');
-    try { const { sid } = await startExample(invite.trim()); await submit(sid); remember(sid, 'JY369 example (your run)'); window.location.search = `?s=${sid}`; }
-    catch (e) { setState(String(e.message || e)); }
-  };
+function ExampleCard() {
+  const [ex, setEx] = useState(null);
+  useEffect(() => { getExample().then(setEx).catch(() => setEx(false)); }, []);
+  if (ex === false) return null;
+  const dl = ex ? Object.entries(ex.info.downloads || {}) : [];
   return (
     <div className="card example-card">
+      {ex?.info?.thumbs?.iv && <img src={ex.urls[ex.base + ex.info.thumbs.iv]} alt="JY195 in vivo max projection" />}
       <div style={{ flex: 1 }}>
         <div className="kicker">No data at hand?</div>
-        <h2 style={{ margin: '4px 0 6px' }}>Run the JY369 example</h2>
-        <p className="hint" style={{ margin: 0 }}>A crop of mouse JY369: 20 in vivo planes (stitched Ch2, 0.68 µm/px, 3 µm z) and the ex vivo GFP + DAPI projection of the same region (0.32 µm/px).
-          Nothing is uploaded: the worker uses its own copy. Or just <a href="?page=example">look at the finished result</a>.</p>
-        {state && state !== 'running' && <div className="err">{state}</div>}
+        <h2 style={{ margin: '4px 0 6px' }}>{ex?.info?.title || 'The JY195 example'}</h2>
+        <p className="hint" style={{ margin: 0 }}>{ex?.info?.description || 'Loading…'}</p>
+        {dl.length > 0 && <div className="hint" style={{ marginTop: 6 }}>Files: {dl.map(([k, d], i) => <span key={k}>{i ? ' · ' : ''}<a href={ex.urls[ex.base + d.path]} download>{d.label || k.toUpperCase()}</a> ({d.mb} MB)</span>)}</div>}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 220 }}>
-        <input type="text" placeholder="Invite code" value={invite} onChange={(e) => setInvite(e.target.value)} autoComplete="off" />
-        <button className="primary" disabled={!invite.trim() || state === 'running'} onClick={go}><Icon name="play" />{state === 'running' ? 'Starting…' : 'Run the example'}</button>
-      </div>
+      <a className="btn primary" href="?page=example"><Icon name="eye" />Explore it</a>
     </div>
   );
 }
@@ -118,7 +113,7 @@ export default function Upload() {
         <h1>Upload a pair</h1>
         <p className="lead">Your browser reads both files first and shows what will be analysed. Nothing leaves your computer until you press Upload.</p>
         <div className="stepper">{['1 · Files', '2 · Describe', '3 · Models', '4 · Upload'].map((s, i) => <span key={s} className={i <= stage ? 'on' : ''}>{s}</span>)}</div>
-        <ExampleRun />
+        <ExampleCard />
         <div className="grid2">
           <div className="card">
             <h2>In vivo · 2-photon stack</h2>

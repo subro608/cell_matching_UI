@@ -230,8 +230,9 @@ export default function Viewer({ b, session = null, downloads = [] }) {
     ...cand.map((i, k) => ({ x: matches.ex[i].x, y: matches.ex[i].y, color: rankColor(k), label: String(k + 1), r: k === rank ? 10 : 6, w: k === rank ? 3 : 1.5 })),
     ...(typeof rank === 'object' ? [{ x: matches.ex[rank.manual].x, y: matches.ex[rank.manual].y, color: [0, 255, 255, 255], label: 'pick', r: 10, w: 3 }] : []),
     ...pairs.map((p) => ({ x: p.exCell.x, y: p.exCell.y, color: GREEN, r: 4, w: 2 })),
+    ...(sel && sel.truth != null ? [{ x: matches.ex[sel.truth].x, y: matches.ex[sel.truth].y, color: [255, 255, 255, 255], label: 'true', r: 14, w: 1.5 }] : []),
     ...(showInliers && inl ? inl.ex.map(([x, y]) => ({ x, y, color: CYAN, r: 5, w: 1.5 })) : []),
-  ], [cand, matches, rank, pairs, showInliers, inl]);
+  ], [cand, matches, rank, pairs, showInliers, inl, sel]);
   const ivMarkers = useMemo(() => [
     ...(sel && sel.z === z ? [{ x: sel.x, y: sel.y, color: [255, 255, 255, 255], r: 12, w: 2 }] : []),
     ...(showInliers && inl ? inl.iv.filter((p) => Math.abs(p[2] - z) <= 1).map(([x, y]) => ({ x, y, color: CYAN, r: 5, w: 1.5 })) : []),
@@ -305,7 +306,7 @@ export default function Viewer({ b, session = null, downloads = [] }) {
               : <input style={{ width: 110 }} type="range" min={16} max={256} step={8} value={ovl.cell} onChange={(e) => setOvl((o) => ({ ...o, cell: Number(e.target.value) }))} aria-label="square size" />}
           </>
         )}
-        <label className="row" style={{ margin: 0 }}><input type="checkbox" checked={link} onChange={(e) => setLink(e.target.checked)} />link views</label>
+        <label className="row" style={{ margin: 0, whiteSpace: 'nowrap' }}><input type="checkbox" checked={link} onChange={(e) => setLink(e.target.checked)} />link views</label>
         <span className="spacer" />
         <span className={`hint ${saveState.error ? 'bad' : ''}`}>{saveText}</span>
         {session && saveState.dirty && <button onClick={saveNow}><Icon name="save" />Save</button>}
@@ -317,7 +318,7 @@ export default function Viewer({ b, session = null, downloads = [] }) {
 
       <aside className="panel left">
         <h1>ivex · IV ↔ EX</h1>
-        {M.example && <div className="msg ok" style={{ marginTop: 10 }}>The JY369 example: your verdicts stay in this browser. <a href="?page=new">Run it yourself</a></div>}
+        {M.example && <div className="msg ok" style={{ marginTop: 10 }}>{M.example_note || 'Example data.'} Your verdicts stay in this browser.</div>}
         <PoseCard pose={pose} runs={M.runs} runIdx={runIdx} setRunIdx={setRunIdx} poseOk={poseOk} setPoseOk={setPoseOk} manual={manual}
           setManual={(f) => { setManual(f); setMode('overlay'); }} canRematch={!!session && session.canRematch} busy={busy}
           onMatchManual={() => doRematch({ affine: toRows(manualT || manualAffine(manual, M.iv.um_xy, M.ex.um_xy)) }, 'Matching at your orientation')}
@@ -413,7 +414,7 @@ export default function Viewer({ b, session = null, downloads = [] }) {
                   return (
                     <tr key={i} className={k === rank ? 'on' : ''} onClick={() => setRank(k)}>
                       <td style={{ color: `rgb(${rankColor(k).slice(0, 3).join(',')})`, fontWeight: 700 }}>{k + 1}</td>
-                      <td>{e.set === 'nuclei_dapi' ? 'DAPI' : e.set} {e.maskId}</td><td>{pct(sel.combined[k])}</td>
+                      <td>{e.set === 'nuclei_dapi' ? 'DAPI' : e.set} {e.maskId}{sel.truth === i && <span className="badge" title="the annotated match"><Icon name="check" size={10} stroke={3} />true</span>}</td><td>{pct(sel.combined[k])}</td>
                       <td>{ai >= 0 ? `#${ai + 1}` : '–'}</td><td>{li >= 0 ? `#${li + 1}` : '–'}</td>
                     </tr>
                   );
@@ -421,6 +422,8 @@ export default function Viewer({ b, session = null, downloads = [] }) {
               </tbody>
             </table>
             {typeof rank === 'object' && <div className="hint">Manual pick: EX {matches.ex[rank.manual].set} {matches.ex[rank.manual].maskId}</div>}
+            {sel.truth != null && <div className={`msg ${cand[0] === sel.truth ? 'ok' : 'bad'}`}>{cand[0] === sel.truth ? 'PMAC ranks the annotated match first.'
+              : cand.includes(sel.truth) ? `The annotated match is PMAC's #${cand.indexOf(sel.truth) + 1}.` : "The annotated match is not in PMAC's top 10."}</div>}
             <div className="hint" style={{ marginTop: 6 }}>PMAC's scores are suggestions; nothing is accepted for you.</div>
           </section>
         ) : <section><div className="empty"><div><Icon name="target" size={22} /><div style={{ marginTop: 6 }}>Click an in vivo cell, or press <kbd>N</kbd>,<br />to see PMAC's candidates.</div></div></div></section>}

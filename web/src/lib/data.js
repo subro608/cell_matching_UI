@@ -26,6 +26,7 @@ function indexMatches(m) {
     combinedIdx: r[col.combined_idx], combined: r[col.combined],
     appearanceIdx: r[col.appearance_idx], appearance: r[col.appearance],
     locationIdx: r[col.location_idx], location: r[col.location],
+    truth: col.truth_idx != null ? r[col.truth_idx] : null,          // annotated match (benchmark examples only)
   }));
   const byKey = new Map(cells.map((c) => [`${c.z}:${c.id}`, c]));
   const byPlane = new Map();

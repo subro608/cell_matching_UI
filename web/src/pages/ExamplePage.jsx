@@ -1,4 +1,4 @@
-// The public JY369 example: its finished result in the viewer (verdicts stay in this browser), with the input files to download.
+// The public JY195 example: its finished result in the viewer (verdicts stay in this browser), with the input files to download.
 import { useEffect, useState } from 'react';
 import Viewer from '../viewer/Viewer';
 import { getExample } from '../lib/api';
@@ -13,7 +13,7 @@ export default function ExamplePage() {
     }).catch((e) => setErr(String(e.message || e)));
   }, []);
   if (err) return <div className="splash error">Could not open the example: {err}</div>;
-  if (!b) return <div className="splash"><div><div className="spinner" />Loading the JY369 example…</div></div>;
-  const dl = Object.entries(ex.info.downloads || {}).map(([k, d]) => ({ label: `${k.toUpperCase()} input (${d.mb} MB)`, href: ex.urls[ex.base + d.path] }));
+  if (!b) return <div className="splash"><div><div className="spinner" />Loading the JY195 example…</div></div>;
+  const dl = Object.entries(ex.info.downloads || {}).map(([k, d]) => ({ label: `${k.toUpperCase()} (${d.mb} MB)`, href: ex.urls[ex.base + d.path] }));
   return <Viewer b={b} downloads={dl} />;
 }

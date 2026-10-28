@@ -13,6 +13,11 @@ import { createHash, randomBytes } from 'node:crypto';
 
 export const LIMITS = { fileBytes: 900 * 2 ** 20, ivVoxels: 400e6, exPixels: 2 * 8000 * 8000, rematchesPerSession: 6, perInvitePerDay: 3 };
 export const MODELS = ['cyto2_ft', 'cyto3_ft', 'cpsam'];
+// stored extension of an upload (same rule as worker/poller.py upload_ext): the reader sniffs the format from the bytes,
+// bioio and .npz also need the extension. Python pickles are never accepted (opening one runs code).
+const EXTS = ['.nd2', '.zip', '.npy', '.npz', '.png', '.jpg', '.jpeg', '.czi', '.lif', '.oib', '.oir', '.ims', '.lsm', '.tif', '.tiff'];
+export const uploadExt = (name) => { const n = String(name || '').toLowerCase(); const e = EXTS.find((x) => n.endsWith(x)) || '.tif'; return e === '.tiff' ? '.tif' : e === '.jpeg' ? '.jpg' : e; };
+export const rawPath = (sid, side, spec) => `sessions/${sid}/raw/${side}${uploadExt(spec?.[side]?.name)}`;
 export const SID = /^[A-Za-z0-9_-]{16,64}$/;
 export const OFFLINE_S = 4 * 3600;                       // the worker writes a heartbeat every 3 h
 
@@ -50,8 +55,9 @@ export async function exists(pathname) { return head(pathname).then(() => true, 
 
 export function checkSid(sid) { if (!SID.test(String(sid || ''))) throw new HttpError(400, 'Bad session id'); return sid; }
 
-export async function session(sid) {
-  checkSid(sid); const r = await readJSON(`sessions/${sid}/request.json`);
+// fresh: bypass the CDN cache (request.json is overwritten by describe / rematch, and a cached copy can lag up to a minute)
+export async function session(sid, { fresh = false } = {}) {
+  checkSid(sid); const r = await readJSON(`sessions/${sid}/request.json`, { fresh });
   if (!r) throw new HttpError(404, 'No such session'); return r.data;
 }
 

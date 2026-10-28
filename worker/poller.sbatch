@@ -3,7 +3,7 @@
 #SBATCH --account=torch_pr_60_tandon_advanced
 #SBATCH --partition=cpu_short
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=4G
+#SBATCH --mem=16G
 #SBATCH --time=05:55:00
 #SBATCH --output=/scratch/sd5963/ivex-match/logs/poller/%x_%j.out
 # Self-resubmitting HPC pull worker (scrontab is disabled here). Start once: sbatch worker/poller.sbatch. Stop: touch STOP_FILE, or

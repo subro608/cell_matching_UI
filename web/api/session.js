@@ -6,15 +6,28 @@ import { handler, HttpError, LIMITS, MODELS, OFFLINE_S, checkSid, newId, readJSO
 const num = (v, lo, hi, name) => { const x = Number(v); if (!Number.isFinite(x) || x < lo || x > hi) throw new HttpError(400, `${name} must be between ${lo} and ${hi}`); return x; };
 const int = (v, lo, hi, name) => Math.round(num(v, lo, hi, name));
 
-function cleanSpec(s) {
+// A side whose format the browser cannot read (ND2, zip of planes, CZI, ...) comes with deferred: true: only its name and size are
+// known until the worker has read it (probe); the rest is confirmed afterwards through /api/describe.
+function cleanDeferred(d, name) {
+  return { deferred: true, bytes: int(d.bytes, 1, LIMITS.fileBytes, `${name} file size`), name: String(d.name || name).slice(0, 120),
+    um_xy: d.um_xy ? num(d.um_xy, 0.02, 20, `${name} pixel size`) : null, um_z: d.um_z ? num(d.um_z, 0.05, 100, `${name} z step`) : null };
+}
+
+export function cleanSpec(s) {
   if (!s || !s.iv || !s.ex) throw new HttpError(400, 'Missing the IV / EX description');
+  if (s.iv.deferred || s.ex.deferred) {
+    const side = (d, name, full) => (d.deferred ? cleanDeferred(d, name) : full());
+    const models = (Array.isArray(s.models) && s.models.length ? s.models : MODELS).filter((m) => MODELS.includes(m));
+    return { title: String(s.title || 'Untitled session').slice(0, 120), models: models.length ? models : MODELS, match_model: models.includes(s.match_model) ? s.match_model : 'cyto3_ft',
+      iv: side(s.iv, 'IV', () => cleanSpec({ ...s, ex: { ...s.iv, deferred: false } }).iv), ex: side(s.ex, 'EX', () => cleanSpec({ ...s, iv: { ...s.ex, deferred: false } }).ex) };
+  }
   const shape = (a, name) => { if (!Array.isArray(a) || a.length < 2 || a.length > 4 || a.some((d) => !Number.isInteger(d) || d < 1)) throw new HttpError(400, `${name} shape is not valid`); return a; };
   const iv = { um_xy: num(s.iv.um_xy, 0.02, 20, 'IV pixel size'), um_z: s.iv.um_z == null || s.iv.um_z === '' ? null : num(s.iv.um_z, 0.05, 100, 'IV z step'),
-    channel: int(s.iv.channel ?? 0, 0, 16, 'IV channel'), diameter_um: num(s.iv.diameter_um ?? 11, 2, 80, 'IV cell diameter'),
+    channel: int(s.iv.channel ?? 0, 0, 16, 'IV channel'), diameter_um: num(s.iv.diameter_um ?? 11, 2, 80, 'IV cell diameter'), position: int(s.iv.position ?? 0, 0, 999, 'IV position'),
     bytes: int(s.iv.bytes, 1, LIMITS.fileBytes, 'IV file size'), shape: shape(s.iv.shape, 'IV'), name: String(s.iv.name || 'iv.tif').slice(0, 120) };
   const ex = { um_xy: num(s.ex.um_xy, 0.02, 20, 'EX pixel size'), channel: int(s.ex.channel ?? 0, 0, 16, 'EX channel'),
     dapi_channel: s.ex.dapi_channel == null || s.ex.dapi_channel === '' ? null : int(s.ex.dapi_channel, 0, 16, 'DAPI channel'),
-    z_range: /^\d+:\d+$/.test(String(s.ex.z_range || '')) ? s.ex.z_range : '', diameter_um: num(s.ex.diameter_um ?? 11, 2, 80, 'EX cell diameter'),
+    z_range: /^\d+:\d+$/.test(String(s.ex.z_range || '')) ? s.ex.z_range : '', diameter_um: num(s.ex.diameter_um ?? 11, 2, 80, 'EX cell diameter'), position: int(s.ex.position ?? 0, 0, 999, 'EX position'),
     bytes: int(s.ex.bytes, 1, LIMITS.fileBytes, 'EX file size'), shape: shape(s.ex.shape, 'EX'), name: String(s.ex.name || 'ex.tif').slice(0, 120) };
   const vox = (sh) => sh.slice(-3).reduce((a, b) => a * b, 1);
   if (vox(iv.shape) > LIMITS.ivVoxels) throw new HttpError(400, `The IV stack is too large for the pilot (${(vox(iv.shape) / 1e6).toFixed(0)} M voxels; limit ${LIMITS.ivVoxels / 1e6} M)`);
@@ -33,7 +46,8 @@ export default handler(async ({ req, body, query }) => {
       spec = { ...info.data.spec, title: `${info.data.title} (your run)` };
     } else spec = cleanSpec(body.spec);
     const invite = await useInvite(body.invite); const sid = newId(18);
-    await writeJSON(`sessions/${sid}/request.json`, { spec, example, created: Date.now() / 1000, invite, rematches: 0 }, { maxAge: 3600 });
+    const needs_probe = !example && !!(spec.iv.deferred || spec.ex.deferred);
+    await writeJSON(`sessions/${sid}/request.json`, { spec, example, needs_probe, created: Date.now() / 1000, invite, rematches: 0 }, { maxAge: 3600 });
     await setState(sid, { status: 'created', text: 'Waiting for the uploads' });
     return { sid };
   }
@@ -42,9 +56,16 @@ export default handler(async ({ req, body, query }) => {
   if (!req0) throw new HttpError(404, 'No such session (it may have expired)');
   const age = hb ? Date.now() / 1000 - hb.data.t : null;
   const jobs = queue?.data.jobs || []; const mine = jobs.findIndex((j) => j.sid === sid);
-  const out = { sid, spec: req0.data.spec, created: req0.data.created, state: state?.data || { status: 'created' },
+  const out = { sid, spec: req0.data.spec, created: req0.data.created, needs_probe: !!req0.data.needs_probe, described: !!req0.data.described, state: state?.data || { status: 'created' },
     worker: { online: age != null && age < OFFLINE_S, last_seen_s: age, pending: hb?.data.pending ?? null }, queue: { length: jobs.length, index: mine } };
-  if (!['created', 'uploading', 'expired', 'failed'].includes(out.state.status) && !(out.state.kind === 'analyze' && out.state.status !== 'done')) {   // a bundle exists
+  if (req0.data.needs_probe) {                       // what the worker read from the files (+ preview images), for the describe form
+    const pr = await readJSON(`sessions/${sid}/probe/probe.json`, { fresh: out.state.status === 'probed' && !req0.data.described });
+    if (pr) {
+      const prev = Object.values(pr.data).flatMap((m) => Object.values(m.previews || {})).map((p) => `sessions/${sid}/${p}`);
+      out.probe = { ...pr.data, urls: await signGet(prev), prefix: `sessions/${sid}/` };
+    }
+  }
+  if (!['created', 'uploading', 'expired', 'failed', 'probed', 'probing'].includes(out.state.status) && !(out.state.kind === 'analyze' && out.state.status !== 'done')) {   // a bundle exists
     const man = await readJSON(`sessions/${sid}/web/manifest.json`);
     if (man) {
       const files = man.data.files.filter((f) => f !== 'manifest.json');

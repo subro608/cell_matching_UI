@@ -3,7 +3,7 @@
 import { handler, HttpError, LIMITS, MODELS, enqueue, readJSON, session, setState, writeJSON } from './_lib.js';
 
 export default handler(async ({ body }) => {
-  const sid = body.sid; const s = await session(sid); const kind = body.kind === 'restore' ? 'restore' : 'rematch';
+  const sid = body.sid; const s = await session(sid, { fresh: true }); const kind = body.kind === 'restore' ? 'restore' : 'rematch';
   const st = (await readJSON(`sessions/${sid}/state.json`, { fresh: true }))?.data;
   if (kind === 'restore') {
     if (st?.status !== 'expired') throw new HttpError(400, 'Nothing to restore');

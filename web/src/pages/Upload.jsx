@@ -9,6 +9,9 @@ import { store } from '../lib/data';
 
 const LIMITS = { fileBytes: 900 * 2 ** 20, ivVoxels: 400e6, exPixels: 120e6 };
 const MODELS = [['cyto2_ft', 'Fine-tuned cyto2', 'Cellpose 3'], ['cyto3_ft', 'Fine-tuned cyto3', 'Cellpose 3'], ['cpsam', 'CP-SAM fine-tune', 'Cellpose 4']];
+// formats: TIFF is read here in the browser; the others are read on the server after upload (ivexmatch.readers)
+const ACCEPT = '.tif,.tiff,.nd2,.zip,.npy,.npz,.png,.jpg,.jpeg,.czi,.lif,.oib,.oir,.ims,.lsm';
+const SERVER_READ = /\.(nd2|zip|npy|npz|png|jpe?g|czi|lif|oib|oir|ims|lsm)$/i;
 const mb = (b) => `${(b / 2 ** 20).toFixed(b < 10 * 2 ** 20 ? 1 : 0)} MB`;
 const remember = (sid, title) => store.set('ivex:sessions', [{ sid, title, created: Date.now() / 1000 }, ...store.get('ivex:sessions', [])].slice(0, 30));
 
@@ -24,13 +27,24 @@ function Preview({ info, channel, z0, z1, label }) {
 
 function DropZone({ side, info, setInfo, error }) {
   const [over, setOver] = useState(false);
-  const take = async (f) => { if (!f) return; setInfo(null, null); try { setInfo(await inspectTiff(f), null); } catch (err) { setInfo(null, `Could not read ${f.name}: ${err.message || err}`); } };
+  const take = async (f) => {
+    if (!f) return; setInfo(null, null);
+    if (/\.pkl$|\.pickle$/i.test(f.name)) return setInfo(null, `${f.name}: Python pickles are not accepted (opening one can run code). Convert it with tools/convert_lut_pickle.py first.`);
+    if (SERVER_READ.test(f.name)) return setInfo({ file: f, deferred: true }, null);                 // read on the server after upload
+    try { setInfo(await inspectTiff(f), null); } catch (err) { setInfo({ file: f, deferred: true }, null); }    // unusual TIFF: let the server try
+  };
   return (
     <>
       <div className={`drop ${over ? 'over' : ''} ${info ? 'has' : ''}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); take(e.dataTransfer.files?.[0]); }}>
-        <input type="file" accept=".tif,.tiff,image/tiff" onChange={(e) => take(e.target.files?.[0])} aria-label={`${side.toUpperCase()} file`} />
-        {info ? (
+        <input type="file" accept={ACCEPT} onChange={(e) => take(e.target.files?.[0])} aria-label={`${side.toUpperCase()} file`} />
+        {info?.deferred ? (
+          <div className="row" style={{ alignItems: 'flex-start' }}>
+            <Icon name="check" size={18} style={{ color: 'var(--accent)', marginTop: 2 }} />
+            <div><div className="big" style={{ margin: 0 }}>{info.file.name}</div>
+              <div className="hint">{mb(info.file.size)} · read on the server after upload: dimensions, channels, positions and pixel sizes are shown for you to confirm before the analysis starts.</div></div>
+          </div>
+        ) : info ? (
           <div className="row" style={{ alignItems: 'flex-start' }}>
             <Icon name="check" size={18} style={{ color: 'var(--accent)', marginTop: 2 }} />
             <div><div className="big" style={{ margin: 0 }}>{info.file.name}</div>
@@ -39,7 +53,7 @@ function DropZone({ side, info, setInfo, error }) {
           </div>
         ) : (
           <><Icon name="upload" size={22} /><div className="big">{side === 'iv' ? 'Drop the in vivo stack' : 'Drop the ex vivo image or stack'}</div>
-            <div className="hint">TIFF or OME-TIFF · or click to choose</div></>
+            <div className="hint">TIFF, OME-TIFF, Nikon ND2, zip of per-plane TIFFs (e.g. Bruker), CZI, LIF, NPY / NPZ, PNG · or click to choose</div></>
         )}
       </div>
       {error && <div className="err" style={{ marginTop: 6 }}>{error}</div>}
@@ -78,14 +92,20 @@ export default function Upload() {
   if (!iv) problems.push('Add the IV file.'); if (!ex) problems.push('Add the EX file.');
   if (iv && iv.file.size > LIMITS.fileBytes) problems.push(`The IV file is ${mb(iv.file.size)}; the pilot accepts up to ${mb(LIMITS.fileBytes)}.`);
   if (ex && ex.file.size > LIMITS.fileBytes) problems.push(`The EX file is ${mb(ex.file.size)}; the pilot accepts up to ${mb(LIMITS.fileBytes)}.`);
-  if (iv && iv.Z * iv.H * iv.W > LIMITS.ivVoxels) problems.push(`The IV stack has ${((iv.Z * iv.H * iv.W) / 1e6).toFixed(0)} M voxels per channel; the limit is ${LIMITS.ivVoxels / 1e6} M.`);
-  if (ex && ex.H * ex.W > LIMITS.exPixels) problems.push(`The EX image is ${((ex.H * ex.W) / 1e6).toFixed(0)} M pixels; the limit is ${LIMITS.exPixels / 1e6} M.`);
-  if (!(Number(f.iv_um) > 0)) problems.push('Give the IV pixel size (µm).'); if (!(Number(f.ex_um) > 0)) problems.push('Give the EX pixel size (µm).');
+  if (iv && !iv.deferred && iv.Z * iv.H * iv.W > LIMITS.ivVoxels) problems.push(`The IV stack has ${((iv.Z * iv.H * iv.W) / 1e6).toFixed(0)} M voxels per channel; the limit is ${LIMITS.ivVoxels / 1e6} M.`);
+  if (ex && !ex.deferred && ex.H * ex.W > LIMITS.exPixels) problems.push(`The EX image is ${((ex.H * ex.W) / 1e6).toFixed(0)} M pixels; the limit is ${LIMITS.exPixels / 1e6} M.`);
+  if (!iv?.deferred && !(Number(f.iv_um) > 0)) problems.push('Give the IV pixel size (µm).'); if (!ex?.deferred && !(Number(f.ex_um) > 0)) problems.push('Give the EX pixel size (µm).');
   if (!f.models.length) problems.push('Choose at least one mask model.'); if (!f.invite.trim()) problems.push('Enter your invite code.');
-  if (ex && f.dapi !== '' && Number(f.dapi) === Number(f.ex_ch)) problems.push('The DAPI channel must differ from the matching channel.');
+  if (ex && !ex.deferred && f.dapi !== '' && Number(f.dapi) === Number(f.ex_ch)) problems.push('The DAPI channel must differ from the matching channel.');
   const stage = !iv || !ex ? 0 : !(Number(f.iv_um) > 0 && Number(f.ex_um) > 0) ? 1 : phase ? 3 : 2;
 
-  const spec = () => ({
+  const deferred = !!(iv?.deferred || ex?.deferred);
+  const later = (info, um, umz) => ({ deferred: true, bytes: info.file.size, name: info.file.name, um_xy: Number(um) > 0 ? Number(um) : null, um_z: Number(umz) > 0 ? Number(umz) : null });
+  const spec = () => (deferred ? {
+    title: f.title || `${iv.file.name} ↔ ${ex.file.name}`, models: f.models, match_model: f.models.includes(f.match) ? f.match : f.models[0],
+    iv: iv.deferred ? later(iv, f.iv_um, f.iv_um_z) : { ...full().iv }, ex: ex.deferred ? later(ex, f.ex_um, null) : { ...full().ex },
+  } : full());
+  const full = () => ({
     title: f.title || `${iv.file.name} ↔ ${ex.file.name}`, models: f.models, match_model: f.models.includes(f.match) ? f.match : f.models[0],
     iv: { um_xy: Number(f.iv_um), um_z: f.iv_um_z === '' ? null : Number(f.iv_um_z), channel: Number(f.iv_ch), diameter_um: Number(f.iv_d), bytes: iv.file.size, shape: iv.shape, name: iv.file.name },
     ex: { um_xy: Number(f.ex_um), channel: Number(f.ex_ch), dapi_channel: f.dapi === '' ? null : Number(f.dapi), z_range: ex.Z > 1 && (Number(f.ex_z0) > 0 || Number(f.ex_z1) < ex.Z) ? `${f.ex_z0}:${f.ex_z1}` : '',
@@ -101,7 +121,7 @@ export default function Upload() {
         if (prog[side] >= 1) continue; setPhase(`upload-${side}`);
         await uploadFile(id, side, info.file, (p) => setProg((s) => ({ ...s, [side]: p }))); setProg((s) => ({ ...s, [side]: 1 }));
       }
-      setPhase('submit'); await submit(id); window.location.search = `?s=${id}`;
+      setPhase('submit'); await submit(id); window.location.search = `?s=${id}`;          // deferred files: the session page asks to confirm
     } catch (e) { setFail(String(e.message || e)); setPhase(null); }
   };
 
@@ -119,33 +139,33 @@ export default function Upload() {
             <h2>In vivo · 2-photon stack</h2>
             <DropZone side="iv" info={iv} setInfo={(i, e) => { setIv(i); setErrs((s) => ({ ...s, iv: e })); }} error={errs.iv} />
             <div className="inline">
-              <div className="field"><label>Pixel size (µm)</label><input type="number" step="any" value={f.iv_um} onChange={set('iv_um')} /></div>
+              <div className="field"><label>Pixel size (µm)</label><input type="number" step="any" value={f.iv_um} onChange={set('iv_um')} placeholder={iv?.deferred ? 'from the file, if stated' : ''} /></div>
               <div className="field"><label>Z step (µm)</label><input type="number" step="any" value={f.iv_um_z} onChange={set('iv_um_z')} /></div>
             </div>
             <div className="inline">
-              <div className="field"><label>Channel to match on</label><select value={f.iv_ch} onChange={set('iv_ch')}>{chans(iv).map((c) => <option key={c} value={c}>channel {c}{iv?.names?.[c] ? ` · ${iv.names[c]}` : ''}</option>)}</select></div>
+              <div className="field" hidden={iv?.deferred}><label>Channel to match on</label><select value={f.iv_ch} onChange={set('iv_ch')}>{chans(iv).map((c) => <option key={c} value={c}>channel {c}{iv?.names?.[c] ? ` · ${iv.names[c]}` : ''}</option>)}</select></div>
               <div className="field"><label>Cell diameter (µm)</label><input type="number" step="any" value={f.iv_d} onChange={set('iv_d')} /></div>
             </div>
-            {iv && <div className="preview"><Preview info={iv} channel={f.iv_ch} label={`max projection · channel ${f.iv_ch}`} /></div>}
+            {iv && !iv.deferred && <div className="preview"><Preview info={iv} channel={f.iv_ch} label={`max projection · channel ${f.iv_ch}`} /></div>}
           </div>
           <div className="card">
             <h2>Ex vivo · confocal</h2>
             <DropZone side="ex" info={ex} setInfo={(i, e) => { setEx(i); setErrs((s) => ({ ...s, ex: e })); }} error={errs.ex} />
             <div className="inline">
-              <div className="field"><label>Pixel size (µm)</label><input type="number" step="any" value={f.ex_um} onChange={set('ex_um')} /></div>
+              <div className="field"><label>Pixel size (µm)</label><input type="number" step="any" value={f.ex_um} onChange={set('ex_um')} placeholder={ex?.deferred ? 'from the file, if stated' : ''} /></div>
               <div className="field"><label>Cell diameter (µm)</label><input type="number" step="any" value={f.ex_d} onChange={set('ex_d')} /></div>
             </div>
             <div className="inline">
-              <div className="field"><label>GFP / matching channel</label><select value={f.ex_ch} onChange={set('ex_ch')}>{chans(ex).map((c) => <option key={c} value={c}>channel {c}{ex?.names?.[c] ? ` · ${ex.names[c]}` : ''}</option>)}</select></div>
-              <div className="field"><label>DAPI channel (optional)</label><select value={f.dapi} onChange={set('dapi')}><option value="">none</option>{chans(ex).map((c) => <option key={c} value={c}>channel {c}{ex?.names?.[c] ? ` · ${ex.names[c]}` : ''}</option>)}</select></div>
+              <div className="field" hidden={ex?.deferred}><label>GFP / matching channel</label><select value={f.ex_ch} onChange={set('ex_ch')}>{chans(ex).map((c) => <option key={c} value={c}>channel {c}{ex?.names?.[c] ? ` · ${ex.names[c]}` : ''}</option>)}</select></div>
+              <div className="field" hidden={ex?.deferred}><label>DAPI channel (optional)</label><select value={f.dapi} onChange={set('dapi')}><option value="">none</option>{chans(ex).map((c) => <option key={c} value={c}>channel {c}{ex?.names?.[c] ? ` · ${ex.names[c]}` : ''}</option>)}</select></div>
             </div>
-            {ex && ex.Z > 1 && (
+            {ex && !ex.deferred && ex.Z > 1 && (
               <div className="inline">
                 <div className="field"><label>Max-project planes from</label><input type="number" min={0} max={ex.Z - 1} value={f.ex_z0} onChange={set('ex_z0')} /></div>
                 <div className="field"><label>To (exclusive)</label><input type="number" min={1} max={ex.Z} value={f.ex_z1} onChange={set('ex_z1')} /></div>
               </div>
             )}
-            {ex && <div className="preview">
+            {ex && !ex.deferred && <div className="preview">
               <Preview info={ex} channel={f.ex_ch} z0={Number(f.ex_z0)} z1={Number(f.ex_z1) || ex.Z} label={`GFP · planes ${f.ex_z0}–${(Number(f.ex_z1) || ex.Z) - 1}`} />
               {f.dapi !== '' && <Preview info={ex} channel={f.dapi} z0={Number(f.ex_z0)} z1={Number(f.ex_z1) || ex.Z} label="DAPI" />}
             </div>}
@@ -167,7 +187,7 @@ export default function Upload() {
           <div className="inline">
             <div className="field"><label>Invite code</label><input type="text" value={f.invite} onChange={set('invite')} autoComplete="off" /></div>
             <div className="field" style={{ justifyContent: 'flex-end' }}>
-              <button className="primary" style={{ padding: '10px 16px' }} disabled={problems.length > 0 || !!phase} onClick={go}><Icon name="upload" />{sid ? 'Retry upload' : 'Upload and analyze'}</button>
+              <button className="primary" style={{ padding: '10px 16px' }} disabled={problems.length > 0 || !!phase} onClick={go}><Icon name="upload" />{sid ? 'Retry upload' : deferred ? 'Upload and read the files' : 'Upload and analyze'}</button>
             </div>
           </div>
           <p className="hint">The orientation is found automatically (PMAC blind pose); you check it in the viewer. By uploading you confirm the data are not human or identifiable,

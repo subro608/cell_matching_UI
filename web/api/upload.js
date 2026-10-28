@@ -1,8 +1,8 @@
 // POST /api/upload  (@vercel/blob/client uploadPresigned protocol) -> a presigned PUT URL for exactly
-// sessions/<sid>/raw/{iv,ex}.tif, capped at the size the session declared. The browser uploads straight to Blob.
+// sessions/<sid>/raw/{iv,ex}<ext>, capped at the size the session declared. The browser uploads straight to Blob.
 import { issueSignedToken } from '@vercel/blob';
 import { handleUploadPresigned } from '@vercel/blob/client';
-import { HttpError, session } from './_lib.js';
+import { HttpError, rawPath, session } from './_lib.js';
 
 export default async function upload(req, res) {
   try {
@@ -12,9 +12,9 @@ export default async function upload(req, res) {
     const json = await handleUploadPresigned({
       body, request: req, webhookPublicKey: process.env.BLOB_WEBHOOK_PUBLIC_KEY || 'unused-no-callbacks',
       getSignedToken: async (pathname, clientPayload) => {
-        const { sid, side } = JSON.parse(clientPayload || '{}');
-        if (!['iv', 'ex'].includes(side) || pathname !== `sessions/${sid}/raw/${side}.tif`) throw new HttpError(400, 'Upload path does not match the session');
-        const s = await session(sid); const max = s.spec[side].bytes;
+        const { sid, side } = JSON.parse(clientPayload || '{}'); const s = await session(sid);
+        if (!['iv', 'ex'].includes(side) || pathname !== rawPath(sid, side, s.spec)) throw new HttpError(400, 'Upload path does not match the session');
+        const max = s.spec[side].bytes;
         const token = await issueSignedToken({ pathname, operations: ['put'], maximumSizeInBytes: max, validUntil: Date.now() + 2 * 3600e3 });
         return { token, urlOptions: { maximumSizeInBytes: max, validUntil: Date.now() + 2 * 3600e3, addRandomSuffix: false, allowOverwrite: true, cacheControlMaxAge: 60 } };
       },

@@ -22,6 +22,16 @@ export default function About() {
         <li><b>Register.</b> From the accepted pairs, a similarity, affine or thin-plate-spline fit per IV plane (pairs within ± Δz) or global, with
           leave-one-out error in µm; blend, swipe and checkerboard overlays. Export the pairs (CSV) and the per-plane transforms (JSON).</li>
       </ol>
+      <h2>File formats</h2>
+      <ul>
+        <li><b>Read in your browser before upload:</b> TIFF, OME-TIFF, ImageJ hyperstacks, BigTIFF (planes × channels × height × width, 2D or 3D).</li>
+        <li><b>Read on the server after upload,</b> then shown to you to confirm (dimensions, channel names, positions, pixel sizes, previews): Nikon ND2
+          (one stage position per analysis), a zip of per-plane TIFF or PNG files (e.g. Bruker Prairie View output; the pixel size and z step are taken
+          from its .xml), Zeiss CZI, Leica LIF, Olympus OIB/OIR, Imaris IMS, NumPy NPY/NPZ, PNG/JPEG.</li>
+        <li><b>Not accepted:</b> Python pickles (opening one can run code). Lab LUT pickles convert to OME-TIFF with <code>tools/convert_lut_pickle.py</code>.
+          Tiles are not stitched: choose one position or tile.</li>
+        <li>Pixel sizes are read from ND2, OME-XML, ImageJ and Prairie View metadata when present; otherwise you enter them.</li>
+      </ul>
       <h2>Privacy and retention</h2>
       <ul>
         <li>Uploads go from your browser to a private Vercel Blob store (US East) through short-lived signed links. Nothing is public; each file

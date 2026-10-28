@@ -6,7 +6,9 @@ import { loadBundle, signedSource } from '../lib/data';
 import { WorkerBanner } from './Home';
 import Shell from '../components/Shell';
 import Icon from '../components/Icon';
+import DescribeForm from './DescribeForm';
 
+const PROBE_STEPS = [['uploaded', 'Uploaded'], ['queued', 'Waiting for the HPC worker'], ['probing', 'Reading your files'], ['probed', 'Confirm the description']];
 const STEPS = [['uploaded', 'Uploaded'], ['queued', 'Waiting for the HPC worker'], ['queued_hpc', 'Waiting for a GPU on NYU HPC'], ['masks', 'Cell masks (3 Cellpose models)'],
   ['pose', 'PMAC blind pose'], ['match', 'PMAC matching'], ['export', 'Preparing the viewer files'], ['done', 'Done']];
 
@@ -19,7 +21,8 @@ function stepIndex(st) {
 }
 
 function Status({ s, onRestore }) {
-  const st = s.state, at = stepIndex(st);
+  const st = s.state, probing = st.kind === 'probe' || ['probing', 'probed'].includes(st.status);
+  const steps = probing ? PROBE_STEPS : STEPS, at = probing ? ({ created: 0, uploading: 0, queued: 1, probing: 2, probed: 3 })[st.status] ?? -1 : stepIndex(st);
   return (
     <Shell worker={s.worker}>
     <div className="page narrow">
@@ -30,10 +33,11 @@ function Status({ s, onRestore }) {
       {st.status === 'failed' && <div className="card"><h2><Icon name="x" /> The analysis failed</h2><p>{st.text}</p>{st.error && <pre className="err">{st.error}</pre>}
         <p className="hint">Check the pixel sizes and channels, then start a new analysis. If it keeps failing, send this session id to the person who gave you the invite.</p></div>}
       {st.status === 'expired' && <div className="card"><h2>Files expired</h2><p>{st.text}</p><button className="primary" onClick={onRestore}>Restore the files</button></div>}
-      {at >= 0 && (
+      {st.status === 'probed' && s.probe && <DescribeForm s={s} />}
+      {at >= 0 && st.status !== 'probed' && (
         <div className="card">
           <h2>Progress</h2>
-          <ol className="steps">{STEPS.map(([k, label], i) => <li key={k} className={i < at ? 'done' : i === at ? 'now' : ''}>{label}{i === at && st.text && st.text !== label ? <span className="hint"> · {st.text}</span> : ''}{i === at && st.slurm ? <span className="hint"> · Slurm {st.slurm}</span> : ''}</li>)}</ol>
+          <ol className="steps">{steps.map(([k, label], i) => <li key={k} className={i < at ? 'done' : i === at ? 'now' : ''}>{label}{i === at && st.text && st.text !== label ? <span className="hint"> · {st.text}</span> : ''}{i === at && st.slurm ? <span className="hint"> · Slurm {st.slurm}</span> : ''}</li>)}</ol>
           {st.status === 'created' && <p className="hint">The uploads did not finish. Start again from <a href="?page=new">New analysis</a>.</p>}
           <p className="hint" style={{ marginBottom: 0 }}>This page refreshes by itself. The analysis takes about 5–30 minutes once it has a GPU.</p>
         </div>
@@ -55,7 +59,7 @@ export default function SessionPage({ sid }) {
           const k = JSON.stringify(r.bundle.manifest.runs?.map((x) => x.name)) + r.bundle.manifest.created;
           if (k !== runsKey.current) { runsKey.current = k; const nb = await loadBundle(signedSource(r.bundle.urls, r.bundle.prefix), r.bundle.manifest); if (live) setB({ ...nb, verify: r.bundle.verify }); }
         }
-        const busy = !['done', 'failed', 'expired'].includes(r.state.status);
+        const busy = !['done', 'failed', 'expired', 'probed'].includes(r.state.status);
         timer = setTimeout(poll, busy ? 15000 : 120000);
       } catch (e) { if (live) { setErr(String(e.message || e)); timer = setTimeout(poll, 30000); } }
     };

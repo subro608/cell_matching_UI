@@ -16,12 +16,17 @@ export const rematch = (sid, body) => call('rematch', { sid, kind: 'rematch', ..
 export const restore = (sid) => call('rematch', { sid, kind: 'restore' });
 export const status = () => call('status');
 
-// one file -> sessions/<sid>/raw/<side>.tif; onProgress(fraction)
+// same rule as web/api/_lib.js uploadExt and worker/poller.py upload_ext
+const EXTS = ['.nd2', '.zip', '.npy', '.npz', '.png', '.jpg', '.jpeg', '.czi', '.lif', '.oib', '.oir', '.ims', '.lsm', '.tif', '.tiff'];
+const uploadExt = (name) => { const n = String(name || '').toLowerCase(); const e = EXTS.find((x) => n.endsWith(x)) || '.tif'; return e === '.tiff' ? '.tif' : e === '.jpeg' ? '.jpg' : e; };
+
+// one file -> sessions/<sid>/raw/<side><ext>; onProgress(fraction)
 export async function uploadFile(sid, side, file, onProgress) {
-  return uploadPresigned(`sessions/${sid}/raw/${side}.tif`, file, {
+  return uploadPresigned(`sessions/${sid}/raw/${side}${uploadExt(file.name)}`, file, {
     access: 'private', handleUploadUrl: '/api/upload', clientPayload: JSON.stringify({ sid, side }), contentType: 'application/octet-stream',
     multipart: false, onUploadProgress: (e) => onProgress?.(e.percentage / 100),
   });
 }
 export const getExample = (name = 'jy195') => call(`example?name=${encodeURIComponent(name)}`);
 export const startExample = (invite, name = 'jy195') => call('session', { invite, example: name });
+export const describe = (sid, spec) => call('describe', { sid, spec });

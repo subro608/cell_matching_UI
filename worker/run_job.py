@@ -5,36 +5,32 @@
   SESSION/web/              web bundle the poller uploads           SESSION/job.json    spec of the job being run
 Uploads are untrusted: only tifffile parses them, after shape / size checks; nothing uploaded is executed.
 usage: python run_job.py SESSION_DIR   (spec = SESSION_DIR/job.json)"""
-import json, sys
+import json, os, subprocess, sys
 from pathlib import Path
 
 LIMITS = dict(iv_voxels=400e6, ex_pixels=120e6, ex_planes=64, iv_planes=200)   # the viewer's < 500 MB per image file
 
 
-def normalize(src, dst):
-    """Any TIFF the browser could read -> (Z, C, Y, X) .npy. Axes from tifffile's series: S (samples) is C when there is no C; unknown
-    axes (Q, I, and T when there is no Z) become Z, then C, in order; anything else keeps its first index. Returns the shape."""
-    import numpy as np, tifffile
-    with tifffile.TiffFile(src) as t:
-        s = t.series[0]; ax = list(s.axes); a = s.asarray()
-    if 'S' in ax:
-        if 'C' in ax: a = a.take(0, axis=ax.index('S')); ax.remove('S')
-        else: ax[ax.index('S')] = 'C'
-    for i, name in enumerate(list(ax)):
-        if name in 'ZCYX': continue
-        if name in 'QIT' and 'Z' not in ax: ax[i] = 'Z'
-        elif name in 'QI' and 'C' not in ax: ax[i] = 'C'
-        else: ax[i] = '_'
-    while '_' in ax: k = ax.index('_'); a = a.take(0, axis=k); ax.pop(k)
-    for name in 'CZ':
-        if name not in ax: a = a[None]; ax.insert(0, name)
-    a = np.transpose(a, [ax.index(n) for n in 'ZCYX'])
-    assert a.shape[2] >= 32 and a.shape[3] >= 32, f'{src.name}: unexpected image shape {a.shape} (axes {s.axes})'
-    np.save(dst, a); return list(a.shape)
+IO_PY = os.environ.get('IVEX_PY_IO', '/scratch/sd5963/venvs/ivex_io_env/bin/python')      # ivexmatch.readers (ND2, zip of planes, TIFF, ...)
+CORE = Path(__file__).resolve().parents[1] / 'core'
+
+
+def raw_file(raw, side):
+    """The uploaded file for one side, whatever its format (raw/iv.nd2, raw/ex.zip, raw/iv.tif, ...)."""
+    found = [f for f in raw.glob(f'{side}.*') if not f.name.endswith('_zcyx.npy')]
+    assert found, f'no {side.upper()} upload found'; return found[0]
+
+
+def normalize(src, dst, position=0):
+    """Any supported upload -> (Z, C, Y, X) .npy through ivexmatch.readers (in its own environment). Returns the shape."""
+    r = subprocess.run([IO_PY, '-m', 'ivexmatch.readers', 'convert', str(src), '--out', str(dst), '--position', str(int(position or 0))],
+                       env=dict(os.environ, PYTHONPATH=str(CORE)), capture_output=True, text=True)
+    if r.returncode: raise SystemExit(f'could not read {src.name}: {(r.stderr.strip().splitlines() or ["?"])[-1]}')
+    return json.loads(r.stdout.strip().splitlines()[-1])['shape']
 
 
 def check_inputs(raw, spec):
-    shapes = {side: normalize(raw / f'{side}.tif', raw / f'{side}.npy') for side in ('iv', 'ex')}
+    shapes = {side: normalize(raw_file(raw, side), raw / f'{side}_zcyx.npy', spec[side].get('position', 0)) for side in ('iv', 'ex')}
     iv, ex = shapes['iv'], shapes['ex']
     assert iv[0] * iv[2] * iv[3] <= LIMITS['iv_voxels'], f'IV stack too large ({iv[0] * iv[2] * iv[3] / 1e6:.0f} M voxels; limit {LIMITS["iv_voxels"] / 1e6:.0f} M)'
     assert iv[0] <= LIMITS['iv_planes'] and ex[0] <= LIMITS['ex_planes'], f'too many planes: IV {iv[0]}, EX {ex[0]}'
@@ -53,8 +49,8 @@ def main(session):
     if spec['kind'] == 'analyze':
         print(json.dumps(check_inputs(session / 'raw', spec)), flush=True)
         iv, ex = spec['iv'], spec['ex']
-        argv = ['analyze', '--iv', str(session / 'raw/iv.npy'), '--iv-um', str(iv['um_xy']), '--iv-channel', str(iv.get('channel', 0)),
-                '--ex', str(session / 'raw/ex.npy'), '--ex-um', str(ex['um_xy']), '--ex-channel', str(ex.get('channel', 0)),
+        argv = ['analyze', '--iv', str(session / 'raw/iv_zcyx.npy'), '--iv-um', str(iv['um_xy']), '--iv-channel', str(iv.get('channel', 0)),
+                '--ex', str(session / 'raw/ex_zcyx.npy'), '--ex-um', str(ex['um_xy']), '--ex-channel', str(ex.get('channel', 0)),
                 '--models', ','.join(spec.get('models') or ['cyto2_ft', 'cyto3_ft', 'cpsam']), '--match-model', spec.get('match_model', 'cyto3_ft'),
                 '--out', a, '--web', w, '--title', spec.get('title') or 'ivex session']
         if iv.get('um_z'): argv += ['--iv-z-um', str(iv['um_z'])]

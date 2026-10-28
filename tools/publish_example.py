@@ -18,7 +18,7 @@ EXAMPLES = Path(os.environ.get('IVEX_EXAMPLES', '/scratch/sd5963/ivex-match-data
 ap = argparse.ArgumentParser(); ap.add_argument('session'); ap.add_argument('name'); ap.add_argument('--title', required=True); ap.add_argument('--description', required=True)
 ap.add_argument('--dry-run', action='store_true'); a = ap.parse_args()
 S = Path(a.session); job = json.loads((S / 'job.json').read_text()); out = EXAMPLES / a.name; (out / 'thumbs').mkdir(parents=True, exist_ok=True)
-iv = np.load(S / 'raw/iv.npy', mmap_mode='r')[:, job['iv'].get('channel', 0)]; ex = np.load(S / 'raw/ex.npy', mmap_mode='r')
+iv = np.load(S / 'raw/iv_zcyx.npy', mmap_mode='r')[:, job['iv'].get('channel', 0)]; ex = np.load(S / 'raw/ex_zcyx.npy', mmap_mode='r')
 z0, z1 = (int(v) for v in job['ex']['z_range'].split(':')) if job['ex'].get('z_range') else (0, ex.shape[0])
 chans = [job['ex'].get('channel', 0)] + ([job['ex']['dapi_channel']] if job['ex'].get('dapi_channel') is not None else [])
 ex_mip = np.stack([np.asarray(ex[z0:z1, c]).max(0) for c in chans])                                    # (C, H, W)

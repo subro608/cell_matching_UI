@@ -24,6 +24,14 @@ NODE = os.environ.get('IVEX_NODE', '/scratch/sd5963/conda_envs/neuro_env_311/bin
 TOKEN_FILE = Path(os.environ.get('IVEX_BLOB_TOKEN_FILE', '/scratch/sd5963/.secrets/vercel_blob_ivex_rw'))
 POLL_S, HEARTBEAT_S, RETAIN_DAYS = 60, 3 * 3600, 7
 SID = re.compile(r'^[A-Za-z0-9_-]{8,64}$')
+IO_PY = os.environ.get('IVEX_PY_IO', '/scratch/sd5963/venvs/ivex_io_env/bin/python'); CORE = HERE.parent / 'core'
+EXTS = ('.nd2', '.zip', '.npy', '.npz', '.png', '.jpg', '.jpeg', '.czi', '.lif', '.oib', '.oir', '.ims', '.lsm', '.tif', '.tiff')
+
+
+def upload_ext(name):
+    """The stored extension of an upload (same rule as web/api/_lib.js uploadExt): readers sniff the format from the bytes, but bioio
+    and .npz need the extension."""
+    n = str(name or '').lower(); return next((e for e in EXTS if n.endswith(e)), '.tif').replace('.tiff', '.tif').replace('.jpeg', '.jpg')
 ENV = dict(os.environ, BLOB_READ_WRITE_TOKEN=TOKEN_FILE.read_text().strip())
 
 
@@ -90,10 +98,10 @@ def claim(job, st):
             src = EXAMPLES / req['example']; assert re.match(r'^[a-z0-9_-]+$', req['example']) and src.is_dir(), f'unknown example {req["example"]}'
             for side in ('iv', 'ex'): shutil.copyfile(src / f'{side}.ome.tif', d / 'raw' / f'{side}.tif')
         else:
-            for side in ('iv', 'ex'):
-                blob('get', f'sessions/{sid}/raw/{side}.tif', str(d / 'raw' / f'{side}.tif'), '--fresh')
-                assert (d / 'raw' / f'{side}.tif').stat().st_size > 0, f'{side}.tif is empty'
-            blob('del', f'sessions/{sid}/raw/iv.tif', f'sessions/{sid}/raw/ex.tif', check=False)     # free; scratch holds the copy now
+            fetch_raw(sid, d, req['spec'])
+    elif job['kind'] == 'probe':
+        req = blob_json(f'sessions/{sid}/request.json', fresh=True); assert req, 'request.json missing'
+        fetch_raw(sid, d, req['spec']); probe(sid, d, req['spec']); return None                    # CPU only, here in the poller
     elif job['kind'] in ('rematch', 'restore'):
         assert (d / 'analysis/meta.json').exists(), 'no analysis on the worker for this session'
         spec = dict(job.get('spec') or {}, sid=sid, kind=job['kind'])
@@ -107,6 +115,34 @@ def claim(job, st):
     slurm = r.stdout.strip().split(';')[0]
     set_status(sid, status='running', step='queued_hpc', text='Waiting for a GPU on NYU HPC', slurm=slurm, kind=job['kind'])
     return dict(id=job['id'], sid=sid, kind=job['kind'], slurm=slurm, step='queued_hpc', started=time.time())
+
+
+def fetch_raw(sid, d, spec):
+    """Uploads -> SESSION/raw/<side><ext> (kept from an earlier probe if already here); then deleted from Blob (free)."""
+    paths = []
+    for side in ('iv', 'ex'):
+        ext = upload_ext(spec[side].get('name')); dst = d / 'raw' / f'{side}{ext}'; paths.append(f'sessions/{sid}/raw/{side}{ext}')
+        if not (dst.exists() and dst.stat().st_size > 0):
+            blob('get', paths[-1], str(dst), '--fresh'); assert dst.stat().st_size > 0, f'{dst.name} is empty'
+    blob('del', *paths, check=False)
+
+
+def probe(sid, d, spec):
+    """Read both uploads with ivexmatch.readers: dimensions, channels, positions, pixel sizes + per-channel previews -> Blob
+    sessions/<sid>/probe/ (probe.json, <side>_c<k>.png); state 'probed' (the page then asks the user to confirm the description)."""
+    set_status(sid, status='probing', text='Reading your files')
+    out = d / 'probe'; out.mkdir(exist_ok=True); res = {}
+    for side in ('iv', 'ex'):
+        f = d / 'raw' / f'{side}{upload_ext(spec[side].get("name"))}'
+        r = subprocess.run([IO_PY, '-m', 'ivexmatch.readers', 'probe', str(f), '--json', str(out / f'{side}.json'), '--previews', str(out / side)],
+                           env=dict(os.environ, PYTHONPATH=str(CORE)), capture_output=True, text=True, timeout=3600)
+        res[side] = json.loads((out / f'{side}.json').read_text()) if (out / f'{side}.json').exists() else dict(error=(r.stderr.strip().splitlines() or ['could not read the file'])[-1])
+        for c, name in (res[side].get('previews') or {}).items():
+            blob('put', f'sessions/{sid}/probe/{side}_c{c}.png', str(out / side / name), '--max-age', '86400'); res[side]['previews'][c] = f'probe/{side}_c{c}.png'
+    put_json(f'sessions/{sid}/probe/probe.json', res, max_age=60)
+    bad = [s for s in res if res[s].get('error')]
+    if bad: set_status(sid, status='failed', text='A file could not be read', error='; '.join(f'{s.upper()}: {res[s]["error"]}' for s in bad), kind='probe')
+    else: set_status(sid, status='probed', text='Files read: please confirm the description', kind='probe')
 
 
 def upload_web(sid, web, full):

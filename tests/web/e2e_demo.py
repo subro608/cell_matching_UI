@@ -14,8 +14,8 @@ with sync_playwright() as p:
     pg.on('pageerror', lambda e: errors.append(f'pageerror: {e}'))
     pg.on('console', lambda m: errors.append(f'console.error: {m.text}') if m.type == 'error' else None)
     pg.goto(URL); pg.wait_for_selector('canvas', timeout=60000); pg.wait_for_timeout(4000)
-    pg.keyboard.press('n'); pg.wait_for_selector('table.cands tbody tr', timeout=20000)
-    rows = pg.locator('table.cands tbody tr').count(); head = pg.locator('.panel.right h2').nth(1).inner_text()
+    pg.keyboard.press('n'); pg.wait_for_selector('.cand-row', timeout=20000)
+    rows = pg.locator('.cand-row').count(); head = pg.locator('.panel.right h2').nth(1).inner_text()
     pg.wait_for_timeout(1500); pg.screenshot(path=str(OUT / 'e2e_1_selected.png'))
     for _ in range(6): pg.keyboard.press('a'); pg.wait_for_timeout(400)
     counts = pg.locator('.counts').inner_text(); reg = pg.locator('.reg').inner_text() if pg.locator('.reg').count() else ''

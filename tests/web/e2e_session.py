@@ -32,8 +32,8 @@ with sync_playwright() as p:
     br = p.chromium.launch(executable_path=SHELL, args=ARGS); pg = page(br)
     accepted = lambda: int(re.search(r'accepted\D*(\d+)', pg.locator('.counts').inner_text()).group(1))
     report['pose'] = pg.locator('.posecard .pose-head').inner_text(); n0 = accepted()
-    pg.keyboard.press('n'); pg.wait_for_selector('table.cands tbody tr', timeout=30000); pg.wait_for_selector('.crops canvas', timeout=30000)
-    report['crop_cards'] = pg.locator('.crops canvas').count(); shot(pg, 'v1_selected')
+    pg.keyboard.press('n'); pg.wait_for_selector('.cand-row', timeout=30000); pg.wait_for_selector('.cands-panel canvas', timeout=30000)
+    report['crop_cards'] = pg.locator('.cands-panel canvas').count(); shot(pg, 'v1_selected')
     for _ in range(12): pg.keyboard.press('a'); time.sleep(0.4)
     report['accepted_before'], report['accepted_after'] = n0, accepted()
     for kind in ('similarity', 'affine', 'tps'):

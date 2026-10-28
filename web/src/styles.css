@@ -185,3 +185,14 @@ table.cands { width: 100%; border-collapse: separate; border-spacing: 0; margin-
 .page .card h2 { margin: 0 0 12px; } .page .card > :last-child { margin-bottom: 0; }
 .zdock span, .zdock b { white-space: nowrap; }
 .posecard select { flex: 1; min-width: 0; }
+/* candidate panel: query soma + neighbourhood, then the top 10 EX candidates */
+.cands-panel { margin-top: 10px; } .query { display: flex; gap: 8px; align-items: flex-end; padding: 8px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; }
+.query .hint { font-size: 11px; line-height: 1.4; }
+.cand-head { display: grid; grid-template-columns: 22px 72px 72px 1fr; gap: 8px; padding: 10px 6px 4px; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.cand-row { display: grid; grid-template-columns: 22px 72px 72px 1fr; gap: 8px; align-items: center; padding: 5px 6px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
+.cand-row:hover { background: #ffffff08; } .cand-row.on { border-color: #34d3b466; background: #34d3b40f; }
+.cand-row .rank { font-weight: 700; color: var(--muted); text-align: center; } .cand-row.on .rank { color: var(--accent); }
+.cand-row canvas, .query canvas { width: 72px; height: 72px; }
+.cand-meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; } .cand-meta b { font-size: 14px; font-variant-numeric: tabular-nums; } .cand-meta .badge { align-self: flex-start; margin: 2px 0 0; }
+.nowrap { white-space: nowrap; } .vbar { overflow: hidden; } .vbar > * { flex-shrink: 0; } .vbar .title { flex-shrink: 1; min-width: 60px; }
+.vbar button, .vbar .btn { padding: 6px 9px; }

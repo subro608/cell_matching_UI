@@ -123,7 +123,11 @@ export default function Viewer({ b, session = null, downloads = [] }) {
     return { n: P.length, fallback, T, rms: Math.sqrt(res.reduce((s, r) => s + r * r, 0) / res.length), loo: median(loo),
       all: P.map((p, i) => ({ key: p.key, r: res[i], loo: loo[i], p })).sort((a, c) => c.r - a.r) };
   }, [pairs, regKind, scope, dz, z, M]);
-  const T = useMemo(() => {                       // native IV px -> EX px (linear part for TPS)
+  const fitT = useMemo(() => (reg.T ? toNative(linear(reg.T), M.iv.um_xy, M.ex.um_xy) : null), [reg, M]);
+  const ovT = manualT || fitT;                     // overlay only from verified pairs (or while setting the orientation by hand)
+  const canOverlay = !!ovT;
+  useEffect(() => { if (!canOverlay && mode === 'overlay') setMode('side'); }, [canOverlay, mode]);
+  const T = useMemo(() => {                       // native IV px -> EX px (linear part for TPS): view linking
     if (manualT) return manualT;
     if (source === 'none') return null;
     if ((source === 'fit' || source === 'auto') && reg.T) return toNative(linear(reg.T), M.iv.um_xy, M.ex.um_xy);
@@ -183,14 +187,14 @@ export default function Viewer({ b, session = null, downloads = [] }) {
       const k = e.key.toLowerCase();
       if (k === 'a') verdict('accepted'); else if (k === 'r') verdict('rejected'); else if (k === 'u') verdict('unsure');
       else if (k === 'n' || k === 'arrowright') step(1); else if (k === 'p' || k === 'arrowleft') step(-1);
-      else if (k === 'o') setMode((m) => (m === 'side' ? 'overlay' : 'side'));
+      else if (k === 'o') setMode((m) => (m === 'side' && canOverlay ? 'overlay' : 'side'));
       else if (/^[1-9]$/.test(k) && sel && Number(k) <= cand.length) setRank(Number(k) - 1);
       else if (k === 'arrowup') setZ((v) => Math.min(M.iv.nz - 1, v + 1)); else if (k === 'arrowdown') setZ((v) => Math.max(0, v - 1));
       else return;
       e.preventDefault();
     };
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
-  }, [verdict, step, sel, cand, M]);
+  }, [verdict, step, sel, cand, M, canOverlay]);
 
   const onIvClick = ({ x, y }) => {
     const plane = matches?.byPlane.get(z) || [];
@@ -217,7 +221,7 @@ export default function Viewer({ b, session = null, downloads = [] }) {
   // --- layers' inputs
   const ivSel = useMemo(() => [{ z, c: 0, t: 0 }], [z]);
   const exSel = useMemo(() => M.ex.channels.map((_, c) => ({ z: 0, c, t: 0 })), [M]);
-  const exColors = useMemo(() => M.ex.channels.map((_, c) => (mode === 'overlay' ? [[255, 0, 255], [80, 120, 255]][c] : [[255, 255, 255], [80, 140, 255]][c]) || [255, 255, 255]), [M, mode]);
+  const exColors = useMemo(() => M.ex.channels.map((_, c) => [[255, 0, 255], [60, 120, 255]][c] || [255, 255, 255]), [M]);      // EX magenta (DAPI blue), IV green
   const acceptedHere = pairs.filter((p) => p.z === z);
   const matchSet = matches?.iv_mask_set;
   const ivHighlight = useMemo(() => !matches ? [] : [
@@ -238,13 +242,13 @@ export default function Viewer({ b, session = null, downloads = [] }) {
     ...(showInliers && inl ? inl.iv.filter((p) => Math.abs(p[2] - z) <= 1).map(([x, y]) => ({ x, y, color: CYAN, r: 5, w: 1.5 })) : []),
   ], [sel, z, showInliers, inl]);
   const exLines = useMemo(() => {
-    if (mode !== 'overlay' || !T || !matches) return [];
+    if (mode !== 'overlay' || !ovT || !matches) return [];
     const out = [];
-    if (sel) { const p = apply(T, [sel.x, sel.y]); cand.slice(0, 3).forEach((i, k) => out.push({ from: [p[0], p[1]], to: [matches.ex[i].x, matches.ex[i].y], color: rankColor(k), w: k === rank ? 2.5 : 1.2 })); }
-    if (showInliers && inl) inl.iv.forEach((q, i) => { const p = apply(T, q); out.push({ from: [p[0], p[1]], to: inl.ex[i], color: CYAN, w: 1 }); });
+    if (sel) { const p = apply(ovT, [sel.x, sel.y]); cand.slice(0, 3).forEach((i, k) => out.push({ from: [p[0], p[1]], to: [matches.ex[i].x, matches.ex[i].y], color: rankColor(k), w: k === rank ? 2.5 : 1.2 })); }
+    if (showInliers && inl) inl.iv.forEach((q, i) => { const p = apply(ovT, q); out.push({ from: [p[0], p[1]], to: inl.ex[i], color: CYAN, w: 1 }); });
     return out;
-  }, [mode, T, sel, cand, matches, rank, showInliers, inl]);
-  const ivMatrix = useMemo(() => (T ? modelMatrix(T) : null), [T]);
+  }, [mode, ovT, sel, cand, matches, rank, showInliers, inl]);
+  const ivMatrix = useMemo(() => (ovT ? modelMatrix(ovT) : null), [ovT]);
   const counts = Object.values(verdicts).reduce((m, v) => ({ ...m, [v.status]: (m[v.status] || 0) + 1 }), {});
 
   // --- exports
@@ -297,7 +301,9 @@ export default function Viewer({ b, session = null, downloads = [] }) {
         <span className="title" title={M.title}>{M.title}</span>
         {M.example && <span className="pill">example</span>}
         <span className="sep" />
-        <div className="segctl">{['side', 'overlay'].map((m) => <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{m === 'side' ? 'Side by side' : 'Overlay'}</button>)}</div>
+        <div className="segctl">{['side', 'overlay'].map((m) => <button key={m} className={mode === m ? 'on' : ''} disabled={m === 'overlay' && !canOverlay}
+          title={m === 'overlay' && !canOverlay ? `Accept at least ${MIN_PAIRS[regKind]} pairs for a ${regKind} fit first` : ''} onClick={() => setMode(m)}>{m === 'side' ? 'Side by side' : 'Overlay'}</button>)}</div>
+        {!canOverlay && <span className="hint nowrap">overlay: {pairs.length}/{MIN_PAIRS[regKind]} pairs</span>}
         {mode === 'overlay' && (
           <>
             <div className="segctl">{['blend', 'swipe', 'checker'].map((s) => <button key={s} className={ovl.style === s ? 'on' : ''} onClick={() => setOvl((o) => ({ ...o, style: s, amount: s === 'swipe' ? 0.5 : o.amount }))}>{s === 'checker' ? 'checkerboard' : s}</button>)}</div>
@@ -308,12 +314,13 @@ export default function Viewer({ b, session = null, downloads = [] }) {
         )}
         <label className="row" style={{ margin: 0, whiteSpace: 'nowrap' }}><input type="checkbox" checked={link} onChange={(e) => setLink(e.target.checked)} />link views</label>
         <span className="spacer" />
-        <span className={`hint ${saveState.error ? 'bad' : ''}`}>{saveText}</span>
+        <span className={`hint nowrap ${saveState.error ? 'bad' : ''}`} title={saveText}>{!session ? 'saved in this browser' : saveState.error ? 'not saved' : saveState.dirty ? 'unsaved' : 'saved'}</span>
         {session && saveState.dirty && <button onClick={saveNow}><Icon name="save" />Save</button>}
-        {downloads.map((d) => <a key={d.href} className="btn ghost" href={d.href} download><Icon name="download" />{d.label}</a>)}
-        <button onClick={exportCSV} title="accepted pairs"><Icon name="download" />Pairs CSV</button>
+        {downloads.map((d) => <a key={d.href} className="btn ghost" href={d.href} download title={`download the ${d.label}`}><Icon name="download" />{d.label.split(' (')[0]}</a>)}
+        <span className="sep" />
+        <button onClick={exportCSV} title="accepted pairs (CSV)"><Icon name="download" />Pairs CSV</button>
         <button onClick={exportTransforms} title={`one ${regKind} per IV plane (± ${dz} µm)`}>transforms.json</button>
-        <button onClick={exportJSON}>Export JSON</button>
+        <button onClick={exportJSON} title="verdicts, pairs and the current fit">Export JSON</button>
       </header>
 
       <aside className="panel left">
@@ -364,17 +371,16 @@ export default function Viewer({ b, session = null, downloads = [] }) {
 
       <main className={`views ${mode}`}>
         {mode === 'side' && (
-          <ImageView title={`In vivo · z ${z}`} src={b.src} image={b.iv} selection={ivSel} contrast={[ivContrast]} colors={[[255, 255, 255]]} channelsVisible={[true]}
+          <ImageView title={`In vivo · z ${z}`} src={b.src} image={b.iv} selection={ivSel} contrast={[ivContrast]} colors={[[0, 255, 0]]} channelsVisible={[true]}
             maskSets={M.iv.mask_sets} maskVisible={maskVis.iv} z={z} viewState={ivView} onViewState={onIvView} onClick={onIvClick}
             highlight={ivHighlight} markers={ivMarkers} only={only.iv}>{zDock}</ImageView>
         )}
         <ImageView title={mode === 'overlay' ? `IV z ${z} (green) on EX (magenta) · ${ovl.style}` : 'Ex vivo'} src={b.src} image={b.ex} selection={exSel} contrast={exContrast}
           colors={exColors} channelsVisible={exVisible} maskSets={M.ex.mask_sets} maskVisible={maskVis.ex} viewState={exView} onViewState={onExView}
           onClick={onExClick} highlight={exHighlight} markers={exMarkers} lines={exLines} only={only.ex}>
-          {mode === 'overlay' && T && <OverlayCanvas image={b.iv} selection={ivSel} contrast={[ivContrast]} colors={[[0, 255, 0]]} matrix={ivMatrix} viewState={exView} mode={ovl.style} amount={ovl.amount} cell={ovl.cell} />}
-          {mode === 'overlay' && T && ovl.style === 'swipe' && <div className="swipe-line" style={{ left: `${(ovl.amount * 100).toFixed(1)}%` }} />}
-          {mode === 'overlay' && !T && <div className="view-note">No transform yet: accept ≥ 2 pairs, use the pose, or set it manually.</div>}
-          {mode === 'overlay' && reg.T?.kind === 'tps' && !manualT && source !== 'pose' && <div className="view-note">The overlay shows the affine part of the TPS.</div>}
+          {mode === 'overlay' && ovT && <OverlayCanvas image={b.iv} selection={ivSel} contrast={[ivContrast]} colors={[[0, 255, 0]]} matrix={ivMatrix} viewState={exView} mode={ovl.style} amount={ovl.amount} cell={ovl.cell} />}
+          {mode === 'overlay' && ovT && ovl.style === 'swipe' && <div className="swipe-line" style={{ left: `${(ovl.amount * 100).toFixed(1)}%` }} />}
+          {mode === 'overlay' && reg.T?.kind === 'tps' && !manualT && <div className="view-note">The overlay shows the affine part of the TPS.</div>}
           {mode === 'overlay' && zDock}
         </ImageView>
       </main>
@@ -400,27 +406,12 @@ export default function Viewer({ b, session = null, downloads = [] }) {
             <h2>IV cell {sel.id} · z {sel.z} {isConfident(sel) && <span className="badge">confident</span>}</h2>
             <div className="hint">({sel.x.toFixed(0)}, {sel.y.toFixed(0)}) px · P(top1) {(100 * sel.p).toFixed(1)}% {sel.mutual ? '· mutual best' : ''}
               {verdicts[`${sel.z}:${sel.id}`] && <b> · {verdicts[`${sel.z}:${sel.id}`].status}</b>}</div>
-            <CropCards b={b} sel={sel} cand={cand} matches={matches} T={T} ivContrast={ivContrast} exContrast={exContrast} rank={typeof rank === 'number' ? rank : -1} onPick={setRank} />
             <div className="seg verdict">
               <button className="acc" onClick={() => verdict('accepted')}><Icon name="check" />Accept (A)</button>
               <button className="rej" onClick={() => verdict('rejected')}><Icon name="x" />Reject (R)</button>
               <button onClick={() => verdict('unsure')}>Unsure (U)</button>
             </div>
-            <table className="cands">
-              <thead><tr><th>#</th><th>EX cell</th><th>P</th><th>appear.</th><th>loc.</th></tr></thead>
-              <tbody>
-                {cand.map((i, k) => {
-                  const e = matches.ex[i], ai = sel.appearanceIdx.indexOf(i), li = sel.locationIdx.indexOf(i);
-                  return (
-                    <tr key={i} className={k === rank ? 'on' : ''} onClick={() => setRank(k)}>
-                      <td style={{ color: `rgb(${rankColor(k).slice(0, 3).join(',')})`, fontWeight: 700 }}>{k + 1}</td>
-                      <td>{e.set === 'nuclei_dapi' ? 'DAPI' : e.set} {e.maskId}{sel.truth === i && <span className="badge" title="the annotated match"><Icon name="check" size={10} stroke={3} />true</span>}</td><td>{pct(sel.combined[k])}</td>
-                      <td>{ai >= 0 ? `#${ai + 1}` : '–'}</td><td>{li >= 0 ? `#${li + 1}` : '–'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <CropCards b={b} sel={sel} cand={cand} matches={matches} ivContrast={ivContrast} exContrast={exContrast} rank={typeof rank === 'number' ? rank : -1} onPick={setRank} pct={pct} />
             {typeof rank === 'object' && <div className="hint">Manual pick: EX {matches.ex[rank.manual].set} {matches.ex[rank.manual].maskId}</div>}
             {sel.truth != null && <div className={`msg ${cand[0] === sel.truth ? 'ok' : 'bad'}`}>{cand[0] === sel.truth ? 'PMAC ranks the annotated match first.'
               : cand.includes(sel.truth) ? `The annotated match is PMAC's #${cand.indexOf(sel.truth) + 1}.` : "The annotated match is not in PMAC's top 10."}</div>}

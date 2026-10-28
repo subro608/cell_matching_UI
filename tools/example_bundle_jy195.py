@@ -78,6 +78,7 @@ manifest = dict(version='ivex-web-2', title=f'JY195 · region {REGION.replace("_
                 source=dict(region=REGION, scores=str(SAVED / f'{REGION}.npz'), volume=ref_data.B_GEOMETRY['JY195']['volume']))
 (OUT / 'manifest.json').write_text(json.dumps(manifest, indent=1))
 thumbs = OUT / 'thumbs'; thumbs.mkdir(exist_ok=True)
-mip = vol.max(0); cv2.imwrite(str(thumbs / 'iv.jpg'), cv2.resize(np.stack([mip] * 3, -1), None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC), [cv2.IMWRITE_JPEG_QUALITY, 90])
-g = ex if ex.ndim == 2 else ex[..., 0]; cv2.imwrite(str(thumbs / 'ex.jpg'), np.stack([g // 4, g, g // 3], -1), [cv2.IMWRITE_JPEG_QUALITY, 90])
+mip = vol.max(0); z0 = np.zeros_like(mip)                                     # IV green, EX magenta (BGR), as in the viewer
+cv2.imwrite(str(thumbs / 'iv_green.jpg'), cv2.resize(np.stack([z0, mip, z0], -1), None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC), [cv2.IMWRITE_JPEG_QUALITY, 90])
+g = ex if ex.ndim == 2 else ex[..., 0]; cv2.imwrite(str(thumbs / 'ex_magenta.jpg'), np.stack([g, np.zeros_like(g), g], -1), [cv2.IMWRITE_JPEG_QUALITY, 90])
 print(json.dumps(dict(out=str(OUT), n=n, correct=correct, pose_residual_um=round(float(np.median(res)), 2), files=files)))

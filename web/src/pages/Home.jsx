@@ -42,7 +42,7 @@ export default function Home() {
             <div className="panel-img">{img('iv') ? <img src={img('iv')} alt="JY195 in vivo, maximum projection" /> : <div className="splash"><div className="spinner" /></div>}<span className="lbl">a</span></div>
             <div className="panel-img">{img('ex') ? <img src={img('ex')} alt="JY195 ex vivo region" /> : <div className="splash"><div className="spinner" /></div>}<span className="lbl">b</span></div>
           </div>
-          <figcaption><b>Example data, mouse JY195.</b> (a) In vivo two-photon field, maximum projection over 39 planes (1.87 µm/px). (b) One ex vivo confocal region
+          <figcaption><b>Example data, mouse JY195.</b> (a) In vivo two-photon field (green), maximum projection over 39 planes (1.87 µm/px). (b) One ex vivo confocal region (magenta)
             (1.67 µm/px) with 55 annotated cell pairs. On this region PMAC ranks the annotated partner first for 37 of 55 cells (67%; 293 of 439 over all
             13 regions). <a href="?page=example">Open it in the viewer</a>.</figcaption>
         </figure>

@@ -297,7 +297,7 @@ export default function Viewer({ b, session = null, downloads = [] }) {
   return (
     <div className="app">
       <header className="vbar">
-        <a className="brand" href="./" title="ivex home"><span className="mark"><svg width="14" height="14" viewBox="0 0 32 32"><circle cx="11" cy="16" r="6" fill="#04110e" /><circle cx="21" cy="16" r="6" fill="none" stroke="#04110e" strokeWidth="3" /></svg></span></a>
+        <a className="brand" href="./" title="ivex home" />
         <span className="title" title={M.title}>{M.title}</span>
         {M.example && <span className="pill">example</span>}
         <span className="sep" />
